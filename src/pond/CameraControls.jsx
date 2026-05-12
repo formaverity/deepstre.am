@@ -4,8 +4,8 @@ export default function CameraControls() {
   const targetZoom    = usePondStore(s => s.camera.targetZoom)
   const zone          = usePondStore(s => s.zone())
   const zoomBy        = usePondStore(s => s.zoomBy)
-  const debugFlow     = usePondStore(s => s.debug.flow)
-  const toggleDebug   = usePondStore(s => s.toggleDebugFlow)
+  const fx            = usePondStore(s => s.fx)
+  const toggleFx      = usePondStore(s => s.toggleFx)
 
   return (
     <div className="camera-controls">
@@ -14,10 +14,10 @@ export default function CameraControls() {
         <button className="zoom-btn" onClick={() => zoomBy(1.25)} aria-label="zoom in">+</button>
         <button className="zoom-btn" onClick={() => zoomBy(0.8)}  aria-label="zoom out">−</button>
         <button
-          className={`zoom-btn zoom-btn--fx${debugFlow ? ' active' : ''}`}
-          onClick={toggleDebug}
-          aria-label="toggle flow debug"
-          title="show displacement vectors"
+          className={`zoom-btn zoom-btn--fx${fx ? ' active' : ''}`}
+          onClick={toggleFx}
+          aria-label="toggle water fx"
+          title="agitate water"
         >
           fx
         </button>

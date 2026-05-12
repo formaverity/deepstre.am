@@ -16,7 +16,7 @@ const usePondStore = create((set, get) => ({
   mouse: { x: 0, y: 0, inside: false },
   focusedSlug: null,
   activeProject: null,  // { slug, mode, target } | null
-  debug: { flow: false },
+  fx: false,
 
   // ── Camera ───────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ const usePondStore = create((set, get) => ({
   setFocused: (slug) => set({ focusedSlug: slug }),
   openProject: (p) => set({ activeProject: p }),
   closeProject: () => set({ activeProject: null }),
-  toggleDebugFlow: () => set(s => ({ debug: { ...s.debug, flow: !s.debug.flow } })),
+  toggleFx: () => set(s => ({ fx: !s.fx })),
 
   // ── Derived ───────────────────────────────────────────────────────────
 

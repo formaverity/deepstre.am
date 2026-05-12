@@ -85,15 +85,24 @@
 
 .zoom-btn--fx {
   font-size: 9px;
-  letter-spacing: 0.04em;
-  color: var(--color-muted, #5a7060);
-  border-color: rgba(159, 225, 203, 0.12);
+  letter-spacing: 0.08em;
+  color: rgba(159, 225, 203, 0.4);
+  border-color: rgba(159, 225, 203, 0.14);
+  transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
 .zoom-btn--fx.active {
-  background: rgba(159, 225, 203, 0.18);
+  background: rgba(159, 225, 203, 0.15);
   color: #9FE1CB;
-  border-color: rgba(159, 225, 203, 0.35);
+  border-color: rgba(159, 225, 203, 0.5);
+  box-shadow: 0 0 10px rgba(159, 225, 203, 0.18), inset 0 0 5px rgba(159, 225, 203, 0.06);
+  text-shadow: 0 0 8px rgba(159, 225, 203, 0.6);
+  animation: fx-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes fx-pulse {
+  0%, 100% { border-color: rgba(159, 225, 203, 0.45); box-shadow: 0 0 8px rgba(159, 225, 203, 0.14), inset 0 0 4px rgba(159, 225, 203, 0.05); }
+  50%       { border-color: rgba(159, 225, 203, 0.75); box-shadow: 0 0 14px rgba(159, 225, 203, 0.28), inset 0 0 7px rgba(159, 225, 203, 0.10); }
 }
 
 /* ── Dev bake shortcut (top-left, dev only) ──────────────────────────── */
