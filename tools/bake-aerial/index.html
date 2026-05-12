@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bake-aerial — deepstre.am</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0d1410;
+      --bg2:     #111d14;
+      --bg3:     #162019;
+      --border:  #1e3022;
+      --fg:      #c8d5c0;
+      --muted:   #5a7060;
+      --accent:  #9FE1CB;
+      --water:   #4a8aa8;
+      --shore:   #a89060;
+      --veg:     #5a9c4e;
+      --outside: #444;
+      --font:    ui-monospace, 'Courier New', Courier, monospace;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 12px;
+    }
+
+    body { display: flex; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 280px;
+      min-width: 280px;
+      overflow-y: auto;
+      padding: 14px 12px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .sidebar h1 {
+      font-size: 13px;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+    }
+
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .section-title {
+      font-size: 9px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      padding-bottom: 3px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .field-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .field label { font-size: 11px; color: var(--muted); }
+
+    .field .val {
+      font-size: 11px;
+      color: var(--fg);
+      min-width: 44px;
+      text-align: right;
+    }
+
+    input[type='range'] {
+      width: 100%;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      background: transparent;
+    }
+
+    input[type='file'] {
+      font-size: 11px;
+      color: var(--muted);
+      width: 100%;
+      cursor: pointer;
+    }
+
+    input[type='file']::file-selector-button {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 3px 8px;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 11px;
+      margin-right: 8px;
+    }
+
+    input[type='file']::file-selector-button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toggle-row label { font-size: 11px; color: var(--muted); cursor: pointer; }
+    input[type='checkbox'] { accent-color: var(--accent); cursor: pointer; }
+
+    /* Buttons */
+    .btn-group { display: flex; flex-direction: column; gap: 5px; }
+
+    button {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 6px 10px;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 11px;
+      text-align: left;
+      transition: border-color 0.1s, color 0.1s;
+    }
+
+    button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    button:disabled { opacity: 0.35; cursor: default; }
+
+    .hint {
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ── Main ── */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    /* Canvas grid */
+    .canvas-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .canvas-wrap { display: flex; flex-direction: column; gap: 4px; }
+
+    .canvas-label {
+      font-size: 9px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .canvas-wrap canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: #000;
+      border: 1px solid var(--border);
+      image-rendering: pixelated;
+    }
+
+    /* ASCII preview */
+    .ascii-section { display: flex; flex-direction: column; gap: 4px; }
+
+    .ascii-section .ascii-label {
+      font-size: 9px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .ascii-preview {
+      font-family: ui-monospace, 'Courier New', Courier, monospace;
+      font-size: 5.5px;
+      line-height: 1;
+      color: var(--accent);
+      background: #000;
+      white-space: pre;
+      overflow-x: auto;
+      padding: 8px;
+      border: 1px solid var(--border);
+      letter-spacing: 0;
+    }
+
+    /* Stats */
+    .stats {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      padding: 8px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .stat { display: flex; flex-direction: column; gap: 2px; }
+
+    .stat-label {
+      font-size: 9px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .stat-value { font-size: 11px; color: var(--fg); }
+
+    /* Placeholder */
+    .placeholder {
+      color: var(--muted);
+      font-size: 11px;
+      padding: 40px 20px;
+      text-align: center;
+      border: 1px solid var(--border);
+      background: var(--bg2);
+    }
+  </style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <h1>bake-aerial</h1>
+
+  <div class="section">
+    <div class="section-title">Source</div>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <div class="section">
+    <div class="section-title">Grid</div>
+    <div class="field">
+      <div class="field-row">
+        <label for="cols">cols</label>
+        <span class="val" id="colsVal">320</span>
+      </div>
+      <input type="range" id="cols" min="60" max="400" step="4" value="320">
+    </div>
+    <div class="field">
+      <div class="field-row">
+        <label for="rows">rows</label>
+        <span class="val" id="rowsVal">160</span>
+      </div>
+      <input type="range" id="rows" min="30" max="200" step="2" value="160">
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Tone</div>
+    <div class="field">
+      <div class="field-row">
+        <label for="clipLo">clip lo</label>
+        <span class="val" id="clipLoVal">2%</span>
+      </div>
+      <input type="range" id="clipLo" min="0" max="20" step="0.5" value="2">
+    </div>
+    <div class="field">
+      <div class="field-row">
+        <label for="clipHi">clip hi</label>
+        <span class="val" id="clipHiVal">98%</span>
+      </div>
+      <input type="range" id="clipHi" min="80" max="100" step="0.5" value="98">
+    </div>
+    <div class="field">
+      <div class="field-row">
+        <label for="gamma">gamma</label>
+        <span class="val" id="gammaVal">0.85</span>
+      </div>
+      <input type="range" id="gamma" min="0.3" max="2.0" step="0.05" value="0.85">
+    </div>
+    <div class="toggle-row">
+      <input type="checkbox" id="invert">
+      <label for="invert">invert</label>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Edges <span style="color:var(--muted);font-size:9px">(preview only)</span></div>
+    <div class="field">
+      <div class="field-row">
+        <label for="edgeThresh">threshold</label>
+        <span class="val" id="edgeThreshVal">0.15</span>
+      </div>
+      <input type="range" id="edgeThresh" min="0" max="0.6" step="0.01" value="0.15">
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Regions</div>
+    <div class="field">
+      <div class="field-row">
+        <label for="waterSat">water sat</label>
+        <span class="val" id="waterSatVal">0.25</span>
+      </div>
+      <input type="range" id="waterSat" min="0" max="0.6" step="0.01" value="0.25">
+    </div>
+    <div class="field">
+      <div class="field-row">
+        <label for="waterHueLo">water hue lo</label>
+        <span class="val" id="waterHueLoVal">160°</span>
+      </div>
+      <input type="range" id="waterHueLo" min="0" max="360" step="1" value="160">
+    </div>
+    <div class="field">
+      <div class="field-row">
+        <label for="waterHueHi">water hue hi</label>
+        <span class="val" id="waterHueHiVal">260°</span>
+      </div>
+      <input type="range" id="waterHueHi" min="0" max="360" step="1" value="260">
+    </div>
+    <div class="field">
+      <div class="field-row">
+        <label for="vegBias">veg bias</label>
+        <span class="val" id="vegBiasVal">0.08</span>
+      </div>
+      <input type="range" id="vegBias" min="0" max="0.4" step="0.01" value="0.08">
+    </div>
+    <div class="field">
+      <div class="field-row">
+        <label for="outLum">out lum</label>
+        <span class="val" id="outLumVal">0.05</span>
+      </div>
+      <input type="range" id="outLum" min="0" max="0.3" step="0.01" value="0.05">
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Export</div>
+    <div class="btn-group">
+      <button id="exportPond"    disabled>↓ pond.json</button>
+      <button id="exportConfig"  disabled>↓ bake.config.json</button>
+      <button id="exportPreview" disabled>↓ preview.txt</button>
+    </div>
+  </div>
+
+  <div class="hint">
+    1. Load an aerial photo<br>
+    2. Tune knobs — previews update live<br>
+    3. pond.json → public/pond.json<br>
+    4. bake.config.json → repo root
+  </div>
+</aside>
+
+<main class="main">
+  <div id="placeholder" class="placeholder">
+    load an aerial image to begin
+  </div>
+
+  <div id="previewArea" style="display:none">
+    <div class="canvas-grid">
+      <div class="canvas-wrap">
+        <div class="canvas-label">source</div>
+        <canvas id="cvSource"></canvas>
+      </div>
+      <div class="canvas-wrap">
+        <div class="canvas-label">brightness</div>
+        <canvas id="cvBrightness"></canvas>
+      </div>
+      <div class="canvas-wrap">
+        <div class="canvas-label">edge mag</div>
+        <canvas id="cvEdge"></canvas>
+      </div>
+      <div class="canvas-wrap">
+        <div class="canvas-label">regions
+          <span style="color:var(--water)">■ water</span>
+          <span style="color:var(--shore)">■ shore</span>
+          <span style="color:var(--veg)">■ veg</span>
+          <span style="color:var(--outside)">■ out</span>
+        </div>
+        <canvas id="cvRegion"></canvas>
+      </div>
+    </div>
+
+    <div class="ascii-section" style="margin-top:14px">
+      <div class="ascii-label">ASCII preview</div>
+      <pre class="ascii-preview" id="asciiPre"></pre>
+    </div>
+
+    <div class="stats" id="statsPanel"></div>
+  </div>
+</main>
+
+<script type="module">
+import { resampleToGrid, computeChannels, pickGlyph, packPondJSON, DEFAULT_CFG } from './bake.js'
+
+// Region palette as [r,g,b] matching CSS vars
+const REGION_RGB = [
+  [0x44, 0x44, 0x44],  // 0 outside
+  [0x4a, 0x8a, 0xa8],  // 1 water
+  [0xa8, 0x90, 0x60],  // 2 shore
+  [0x5a, 0x9c, 0x4e],  // 3 vegetation
+]
+
+// State
+let imageBitmap    = null
+let sourceFilename = ''
+let lastChannels   = null
+let lastCfg        = null
+let debTimer       = null
+
+// DOM
+const fileInput    = document.getElementById('fileInput')
+const placeholder  = document.getElementById('placeholder')
+const previewArea  = document.getElementById('previewArea')
+const cvSource     = document.getElementById('cvSource')
+const cvBrightness = document.getElementById('cvBrightness')
+const cvEdge       = document.getElementById('cvEdge')
+const cvRegion     = document.getElementById('cvRegion')
+const asciiPre     = document.getElementById('asciiPre')
+const statsPanel   = document.getElementById('statsPanel')
+const btnPond      = document.getElementById('exportPond')
+const btnConfig    = document.getElementById('exportConfig')
+const btnPreview   = document.getElementById('exportPreview')
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function getCfg() {
+  return {
+    cols:          +document.getElementById('cols').value,
+    rows:          +document.getElementById('rows').value,
+    clipLo:        +document.getElementById('clipLo').value / 100,
+    clipHi:        +document.getElementById('clipHi').value / 100,
+    gamma:         +document.getElementById('gamma').value,
+    invert:         document.getElementById('invert').checked,
+    edgeThreshold: +document.getElementById('edgeThresh').value,
+    waterSat:      +document.getElementById('waterSat').value,
+    waterHueLo:    +document.getElementById('waterHueLo').value,
+    waterHueHi:    +document.getElementById('waterHueHi').value,
+    vegBias:       +document.getElementById('vegBias').value,
+    outLum:        +document.getElementById('outLum').value,
+  }
+}
+
+function syncDisplays() {
+  document.getElementById('colsVal').textContent      = document.getElementById('cols').value
+  document.getElementById('rowsVal').textContent      = document.getElementById('rows').value
+  document.getElementById('clipLoVal').textContent    = document.getElementById('clipLo').value + '%'
+  document.getElementById('clipHiVal').textContent    = document.getElementById('clipHi').value + '%'
+  document.getElementById('gammaVal').textContent     = (+document.getElementById('gamma').value).toFixed(2)
+  document.getElementById('edgeThreshVal').textContent = (+document.getElementById('edgeThresh').value).toFixed(2)
+  document.getElementById('waterSatVal').textContent  = (+document.getElementById('waterSat').value).toFixed(2)
+  document.getElementById('waterHueLoVal').textContent = document.getElementById('waterHueLo').value + '°'
+  document.getElementById('waterHueHiVal').textContent = document.getElementById('waterHueHi').value + '°'
+  document.getElementById('vegBiasVal').textContent   = (+document.getElementById('vegBias').value).toFixed(2)
+  document.getElementById('outLumVal').textContent    = (+document.getElementById('outLum').value).toFixed(2)
+}
+
+function putImageData(canvas, imgData) {
+  canvas.width  = imgData.width
+  canvas.height = imgData.height
+  canvas.getContext('2d').putImageData(imgData, 0, 0)
+}
+
+function makeGrayscaleImageData(channel, cols, rows) {
+  const id = new ImageData(cols, rows)
+  for (let i = 0; i < cols * rows; i++) {
+    const v = channel[i]
+    id.data[i * 4]     = v
+    id.data[i * 4 + 1] = v
+    id.data[i * 4 + 2] = v
+    id.data[i * 4 + 3] = 255
+  }
+  return id
+}
+
+function makeRegionImageData(region, cols, rows) {
+  const id = new ImageData(cols, rows)
+  for (let i = 0; i < cols * rows; i++) {
+    const [r, g, b] = REGION_RGB[region[i]] ?? REGION_RGB[0]
+    id.data[i * 4]     = r
+    id.data[i * 4 + 1] = g
+    id.data[i * 4 + 2] = b
+    id.data[i * 4 + 3] = 255
+  }
+  return id
+}
+
+function buildAscii(channels, cfg) {
+  const { brightness, edgeMag, edgeAngle, region } = channels
+  const { cols, rows } = cfg
+  const lines = []
+  for (let y = 0; y < rows; y++) {
+    let line = ''
+    for (let x = 0; x < cols; x++) {
+      const i = y * cols + x
+      line += pickGlyph(brightness[i], edgeMag[i], edgeAngle[i], region[i], cfg)
+    }
+    lines.push(line)
+  }
+  return lines.join('\n')
+}
+
+function renderStats(channels, cfg) {
+  const { brightness, edgeMag, region } = channels
+  const n = cfg.cols * cfg.rows
+  let sumB = 0, sumE = 0
+  const counts = [0, 0, 0, 0]
+  for (let i = 0; i < n; i++) {
+    sumB += brightness[i]
+    sumE += edgeMag[i]
+    counts[region[i]]++
+  }
+  const meanB = (sumB / n / 2.55).toFixed(1) + '%'
+  const meanE = (sumE / n / 2.55).toFixed(1) + '%'
+  const pct   = counts.map(c => (c / n * 100).toFixed(1) + '%')
+  const COLORS = ['var(--outside)', 'var(--water)', 'var(--shore)', 'var(--veg)']
+  const LABELS = ['outside', 'water', 'shore', 'veg']
+  let html = `
+    <div class="stat">
+      <div class="stat-label">mean brightness</div>
+      <div class="stat-value">${meanB}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">mean edge</div>
+      <div class="stat-value">${meanE}</div>
+    </div>
+  `
+  LABELS.forEach((l, i) => {
+    html += `
+      <div class="stat">
+        <div class="stat-label" style="color:${COLORS[i]}">${l}</div>
+        <div class="stat-value">${pct[i]}</div>
+      </div>
+    `
+  })
+  statsPanel.innerHTML = html
+}
+
+// ── Bake + render ─────────────────────────────────────────────────────
+
+function bake() {
+  if (!imageBitmap) return
+  const cfg       = getCfg()
+  const imageData = resampleToGrid(imageBitmap, cfg.cols, cfg.rows)
+  const channels  = computeChannels(imageData, cfg)
+  lastChannels    = channels
+  lastCfg         = cfg
+
+  putImageData(cvSource, imageData)
+  putImageData(cvBrightness, makeGrayscaleImageData(channels.brightness, cfg.cols, cfg.rows))
+  putImageData(cvEdge,       makeGrayscaleImageData(channels.edgeMag,    cfg.cols, cfg.rows))
+  putImageData(cvRegion,     makeRegionImageData(channels.region,         cfg.cols, cfg.rows))
+  asciiPre.textContent = buildAscii(channels, cfg)
+  renderStats(channels, cfg)
+
+  btnPond.disabled    = false
+  btnConfig.disabled  = false
+  btnPreview.disabled = false
+}
+
+function scheduleBake() {
+  syncDisplays()
+  clearTimeout(debTimer)
+  debTimer = setTimeout(bake, 80)
+}
+
+// ── Export ────────────────────────────────────────────────────────────
+
+function download(content, filename, mime) {
+  const blob = new Blob([content], { type: mime })
+  const url  = URL.createObjectURL(blob)
+  const a    = Object.assign(document.createElement('a'), { href: url, download: filename })
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+btnPond.addEventListener('click', () => {
+  if (!lastChannels || !lastCfg) return
+  const pond = packPondJSON({
+    channels: lastChannels,
+    cfg:      lastCfg,
+    meta: {
+      source:       sourceFilename,
+      baked_at:     new Date().toISOString(),
+      cols:         lastCfg.cols,
+      rows:         lastCfg.rows,
+      world_aspect: imageBitmap.width / imageBitmap.height,
+    },
+  })
+  download(JSON.stringify(pond, null, 2), 'pond.json', 'application/json')
+})
+
+btnConfig.addEventListener('click', () => {
+  if (!lastCfg) return
+  download(JSON.stringify(lastCfg, null, 2), 'bake.config.json', 'application/json')
+})
+
+btnPreview.addEventListener('click', () => {
+  if (!lastChannels || !lastCfg) return
+  download(buildAscii(lastChannels, lastCfg), 'preview.txt', 'text/plain')
+})
+
+// ── Auto-compute cols from source aspect ──────────────────────────────
+
+const CHAR_ASPECT = 0.6
+
+function syncColsFromAspect() {
+  if (!imageBitmap) return
+  const rows     = +document.getElementById('rows').value
+  const autoCols = Math.round(rows * (imageBitmap.width / imageBitmap.height) / CHAR_ASPECT)
+  const colsEl   = document.getElementById('cols')
+  colsEl.value   = Math.max(+colsEl.min, Math.min(+colsEl.max, autoCols))
+  syncDisplays()
+}
+
+// ── File load ─────────────────────────────────────────────────────────
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+  sourceFilename = file.name
+  imageBitmap    = await createImageBitmap(file)
+  placeholder.style.display  = 'none'
+  previewArea.style.display  = 'flex'
+  previewArea.style.flexDirection = 'column'
+  previewArea.style.gap      = '14px'
+  syncColsFromAspect()
+  bake()
+})
+
+// ── Control listeners ─────────────────────────────────────────────────
+
+document.getElementById('rows').addEventListener('input', () => {
+  syncColsFromAspect()
+  scheduleBake()
+})
+
+document.querySelectorAll('input[type="range"], input[type="checkbox"]')
+  .forEach(el => {
+    if (el.id !== 'rows') el.addEventListener('input', scheduleBake)
+  })
+
+// Init displays
+syncDisplays()
+</script>
+
+</body>
+</html>

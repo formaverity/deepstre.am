@@ -1,0 +1,14 @@
+{
+  "cols": 400,
+  "rows": 200,
+  "clipLo": 0.14,
+  "clipHi": 0.98,
+  "gamma": 0.45,
+  "invert": false,
+  "edgeThreshold": 0.27,
+  "waterSat": 0.33,
+  "waterHueLo": 223,
+  "waterHueHi": 156,
+  "vegBias": 0,
+  "outLum": 0.06
+}

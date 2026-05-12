@@ -1,0 +1,138 @@
+/* ── Root ────────────────────────────────────────────────────────────── */
+
+.pond-root {
+  position: relative;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: #0d1410;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pond-root.dragging {
+  cursor: grabbing;
+}
+
+/* ── Glass overlay base (shared by controls + future panels) ─────────── */
+
+.glass {
+  background: rgba(13, 20, 16, 0.72);
+  border: 0.5px solid rgba(159, 225, 203, 0.18);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 2px;
+}
+
+/* ── Camera controls (bottom-right) ─────────────────────────────────── */
+
+.camera-controls {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 11px;
+  color: var(--color-fg, #c8d5c0);
+  background: rgba(13, 20, 16, 0.72);
+  border: 0.5px solid rgba(159, 225, 203, 0.18);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 2px;
+  pointer-events: all;
+}
+
+.zone-label {
+  color: var(--color-muted, #5a7060);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.zoom-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.zoom-btn {
+  width: 26px;
+  height: 26px;
+  background: rgba(159, 225, 203, 0.07);
+  border: 0.5px solid rgba(159, 225, 203, 0.2);
+  color: #9FE1CB;
+  font-size: 15px;
+  line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1px;
+  transition: background 0.1s;
+}
+
+.zoom-btn:hover {
+  background: rgba(159, 225, 203, 0.16);
+}
+
+.zoom-btn:active {
+  background: rgba(159, 225, 203, 0.25);
+}
+
+.zoom-btn--fx {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--color-muted, #5a7060);
+  border-color: rgba(159, 225, 203, 0.12);
+}
+
+.zoom-btn--fx.active {
+  background: rgba(159, 225, 203, 0.18);
+  color: #9FE1CB;
+  border-color: rgba(159, 225, 203, 0.35);
+}
+
+/* ── Dev bake shortcut (top-left, dev only) ──────────────────────────── */
+
+.dev-bake-btn {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(159, 225, 203, 0.5);
+  text-decoration: none;
+  letter-spacing: 0.1em;
+  padding: 3px 7px;
+  border: 0.5px solid rgba(159, 225, 203, 0.18);
+  border-radius: 2px;
+  background: rgba(13, 20, 16, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: color 0.15s, border-color 0.15s;
+  pointer-events: all;
+  z-index: 10;
+}
+
+.dev-bake-btn:hover {
+  color: #9FE1CB;
+  border-color: rgba(159, 225, 203, 0.4);
+}
+
+/* ── Hint bar (bottom-left) ──────────────────────────────────────────── */
+
+.hint-bar {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(200, 213, 192, 0.28);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+  white-space: nowrap;
+}

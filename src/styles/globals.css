@@ -1,0 +1,41 @@
+/* reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --color-bg: #0d1410;
+  --color-fg: #c8d5c0;
+  --color-accent: #4a7c59;
+  --color-muted: #3a4a3e;
+  --font-mono: 'Courier New', Courier, 'Lucida Console', monospace;
+  --font-sans: system-ui, -apple-system, sans-serif;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  line-height: 1.6;
+  min-height: 100dvh;
+}
+
+img, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
