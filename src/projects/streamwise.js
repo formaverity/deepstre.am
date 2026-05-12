@@ -15,6 +15,6 @@ export default {
   },
   frame: {
     mode: 'iframe',
-    target: 'https://streamwise.vercel.app',
+    target: 'https://streamwise-iota.vercel.app',
   },
 }

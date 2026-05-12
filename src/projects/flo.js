@@ -15,6 +15,6 @@ export default {
   },
   frame: {
     mode: 'iframe',
-    target: 'https://flo-app.vercel.app',
+    target: 'https://flo-app-silk.vercel.app',
   },
 }
