@@ -178,13 +178,19 @@ class AudioEngine {
 
       const gp = new Tone.GrainPlayer(this.buffer)
       gp.loop         = true
-      gp.grainSize    = 0.08
-      gp.overlap      = 0.5
+      // Each voice gets progressively larger grains and tighter overlap —
+      // root stays tight and precise, upper harmonics bloom wider
+      gp.grainSize    = 0.05 + i * 0.04
+      gp.overlap      = Math.max(0.15, 0.65 - i * 0.12)
       gp.playbackRate = rate
 
       if (position !== undefined && this.duration) {
-        const pos     = Math.max(0, Math.min(0.999, position)) * this.duration
-        const winSize = Math.min(0.3, Math.max(0.05, this.duration * 0.08))
+        // Spread voices evenly across a 35% window of the audio from the tap point,
+        // so each harmonic samples a genuinely different texture
+        const spread    = (voiceCount > 1 ? i / (voiceCount - 1) : 0) * 0.35
+        const voicePos  = (position + spread) % 1.0
+        const pos       = Math.max(0, Math.min(0.999, voicePos)) * this.duration
+        const winSize   = Math.min(0.4, Math.max(0.06, this.duration * (0.06 + i * 0.02)))
         gp.loopStart  = pos
         gp.loopEnd    = Math.min(this.duration, pos + winSize)
       }
@@ -231,6 +237,30 @@ class AudioEngine {
       try { master?.disconnect() } catch (_) {}
       try { filter?.disconnect() } catch (_) {}
     }, fadeDur * 1000 + 50)
+  }
+
+  // ── Stop all active audio (for clean navigation exit) ──────────────────
+
+  stopAll() {
+    try { if (this.isPlaying) this.player.stop() } catch (_) {}
+    this._pauseOffset   = 0
+    this._lastKnownTime = 0
+
+    if (this.grainPlayer) {
+      try { this.grainPlayer.stop() }        catch (_) {}
+      try { this.grainPlayer.disconnect() } catch (_) {}
+    }
+
+    const voices = this.chordVoices.splice(0)
+    voices.forEach(v => {
+      try { v.grainPlayer.stop() }       catch (_) {}
+      try { v.grainPlayer.disconnect() } catch (_) {}
+      try { v.gain.disconnect() }        catch (_) {}
+    })
+    try { this._chordMasterGain?.disconnect() } catch (_) {}
+    try { this.chordFilter?.disconnect() }      catch (_) {}
+    this._chordMasterGain = null
+    this.chordFilter      = null
   }
 
   // ── Volume fades for clean chain swaps ──────────────────────────────────

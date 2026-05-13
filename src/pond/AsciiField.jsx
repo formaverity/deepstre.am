@@ -450,6 +450,14 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           ctx.fillStyle      = color
           ctx.strokeStyle    = color
 
+          // Reveal blur: starts at 6px as letters appear, dissolves to 0 at full reveal.
+          // Set once per creature — same revealFactor applies to every cell.
+          const revealBlurPx = revealFactor > 0.005 ? Math.max(0, (1 - revealFactor) * 6) : 0
+
+          // Cache per-cell positions so we can draw blocks first, then reveal chars
+          // with blur in a second pass (avoids toggling ctx.filter inside a tight loop).
+          const cellCache = []
+
           for (let ci = 0; ci < cells.length; ci++) {
             const cell     = cells[ci]
             // Drift in sync with water shimmer — sample the same wind-advected fbm field
@@ -486,12 +494,20 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
               ctx.globalAlpha = blockAlpha * fillFactor
               ctx.fillText('█', px, py)
             }
-            // Actual character — fades in on hover or high zoom
-            if (revealFactor > 0.005) {
-              ctx.globalAlpha = cellAlpha * revealFactor
-              ctx.fillText(cell.revealChar, px, py)
-            }
+
+            if (revealFactor > 0.005) cellCache.push({ px, py, cellAlpha, revealChar: cell.revealChar })
           }
+
+          // Second pass: reveal characters with blur applied once for the whole creature
+          if (cellCache.length) {
+            if (revealBlurPx > 0.1) ctx.filter = `blur(${revealBlurPx.toFixed(1)}px)`
+            for (const { px, py, cellAlpha, revealChar } of cellCache) {
+              ctx.globalAlpha = cellAlpha * revealFactor
+              ctx.fillText(revealChar, px, py)
+            }
+            if (revealBlurPx > 0.1) ctx.filter = 'none'
+          }
+
           ctx.globalAlpha = 1
         }
         ctx.restore()

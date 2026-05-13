@@ -60,6 +60,7 @@ export default function Murmur() {
 
     await new Promise(r => setTimeout(r, 340))  // wait for fade to complete
 
+    audioEngine.stopAll()      // stop all players while master is still faded
     audioEngine.fadeIn(0.001)  // reset volume for next visit
     navigate('/')
   }, [navigate])
