@@ -77,12 +77,10 @@ const WOBBLE_AMP   = 3.0
 const WOBBLE_FREQ  = 0.032
 const WOBBLE_SPEED = 1.2
 
-// Zoom threshold for cluster → glyph switch (crisp, no crossfade)
-const GLYPH_ZOOM_THRESHOLD = 0.8
-// Hex ring of 6 + centre dot — offsets in world-px
-const CLUSTER_DOTS       = [[0,-13],[11,-6],[11,6],[0,13],[-11,6],[-11,-6],[0,0]]
-const CLUSTER_DOT_R      = 2.8
-const CLUSTER_BOUNDING_R = 16   // outer ring (13) + dot radius (2.8) ≈ 16
+// Glyphs pepper in across this zoom range — each project has a distinct threshold
+const GLYPH_PEPPER_MIN   = 0.85
+const GLYPH_PEPPER_MAX   = 0.95
+const CLUSTER_BOUNDING_R = 24   // encloses the █ blob cluster
 
 // Blob zoom thresholds — match AERIAL_MAX / SURFACE_MAX in usePondStore
 const BLOB_ZOOM_MIN = 1.6   // single char fades out, blob fades in
@@ -98,6 +96,26 @@ function phaseFromSeed(str) {
   let h = 5381
   for (let i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0
   return (h % 1000) / 1000 * Math.PI * 2
+}
+
+// Procedural amoeba-shaped cluster of █ cells for the zoomed-out view.
+// Shape varies per slug via basePhase; cells use CELL_W/CELL_H grid spacing.
+function buildClusterBlob(slug) {
+  const basePhase = phaseFromSeed(slug + '_cl')
+  const cells     = []
+  for (let row = -3; row <= 3; row++) {
+    for (let col = -4; col <= 4; col++) {
+      const dist  = Math.sqrt(col * col * 0.65 + row * row * 1.15)
+      const angle = Math.atan2(row, col)
+      const vary  = 0.55 * Math.sin(angle * 3 + basePhase)
+                  + 0.30 * Math.cos(angle * 5 + basePhase * 1.8)
+                  + 0.20 * Math.sin(angle * 7 + basePhase * 0.9)
+      if (dist < 1.85 + vary) {
+        cells.push({ homeX: col * CELL_W, homeY: row * CELL_H, phase: phaseFromSeed(slug + col + ',' + row) })
+      }
+    }
+  }
+  return cells
 }
 
 export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
@@ -151,6 +169,27 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
         }
       }
       blobCells[p.slug] = cells
+    }
+
+    // Zoomed-out amoeba clusters — one blob shape per project
+    const clusterBlobs = {}
+    for (const p of projects) clusterBlobs[p.slug] = buildClusterBlob(p.slug)
+
+    // Fast lookup: Set of "col,row" offsets for exact-cell clearance matching
+    const clusterBlobSets = {}
+    for (const p of projects) {
+      const s = new Set()
+      for (const bc of clusterBlobs[p.slug]) {
+        s.add(`${Math.round(bc.homeX / CELL_W)},${Math.round(bc.homeY / CELL_H)}`)
+      }
+      clusterBlobSets[p.slug] = s
+    }
+
+    // Each project reveals its glyph at a distinct zoom within GLYPH_PEPPER_MIN..MAX
+    const glyphThresholds = {}
+    for (const p of projects) {
+      const t01 = phaseFromSeed(p.slug + '_gt') / (Math.PI * 2)
+      glyphThresholds[p.slug] = GLYPH_PEPPER_MIN + t01 * (GLYPH_PEPPER_MAX - GLYPH_PEPPER_MIN)
     }
 
     // ── Glyph masks ────────────────────────────────────────────────────
@@ -289,7 +328,6 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const prevAnim = animZoom.v
       animZoom.v = targetZoom
       const zoom = animZoom.v
-      const showGlyph  = zoom >= GLYPH_ZOOM_THRESHOLD
       const blobReveal = smoothstep((zoom - BLOB_ZOOM_MIN) / (SVG_ZOOM_MIN - BLOB_ZOOM_MIN))
 
       if (pivot && prevAnim > 0.001) {
@@ -355,7 +393,8 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const visCreatures = creatures.filter(c => {
         const hp = c.hoverProgress ?? 0
         const gm = glyphMasks[c.slug]
-        const glyphHW = showGlyph ? (gm ? gm.totalHalfW : (c.radius ?? 12) * 4) : CLUSTER_BOUNDING_R + GLYPH_MASK_MARGIN
+        const showGlyphC = zoom >= (glyphThresholds[c.slug] ?? GLYPH_PEPPER_MIN)
+        const glyphHW = showGlyphC ? (gm ? gm.totalHalfW : (c.radius ?? 12) * 4) : CLUSTER_BOUNDING_R + GLYPH_MASK_MARGIN
         const textExtra = hp > 0 ? TEXT_GAP + (textWidthsRef.current[c.slug] ?? 0) * hp : 0
         const r1 = Math.max(c.influenceRadius ?? ((c.radius ?? 12) * 4), glyphHW + textExtra)
         return c.x + r1 > wL && c.x - r1 < wR && c.y + r1 > wT && c.y - r1 < wB
@@ -419,9 +458,10 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           for (const c of visCreatures) {
             const lx = cellCx - c.x, ly = cellCy - c.y
             const gm = glyphMasks[c.slug]
-            if (!showGlyph) {
-              const cr = CLUSTER_BOUNDING_R + GLYPH_MASK_MARGIN
-              if (lx * lx + ly * ly < cr * cr) { inClearance = true; break }
+            if (zoom < (glyphThresholds[c.slug] ?? GLYPH_PEPPER_MIN)) {
+              const col = Math.round(lx / CELL_W)
+              const row = Math.round(ly / CELL_H)
+              if (clusterBlobSets[c.slug]?.has(`${col},${row}`)) { inClearance = true; break }
             } else if (gm) {
               if (Math.abs(lx) <= gm.totalHalfW && Math.abs(ly) <= gm.totalHalfH) {
                 const mx = Math.min(gm.width  - 1, Math.round((lx + gm.totalHalfW) * GLYPH_MASK_SCALE))
@@ -489,17 +529,23 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           const glyphX = c.x + wobX * WOBBLE_AMP
           const glyphY = c.y + wobY * WOBBLE_AMP
 
-          if (!showGlyph) {
-            // Dot cluster — hex ring + centre, shown when zoomed out
-            ctx.save()
-            ctx.fillStyle   = colorForStatus(c.project.status)
-            ctx.globalAlpha = 0.55
-            for (const [dx, dy] of CLUSTER_DOTS) {
-              ctx.beginPath()
-              ctx.arc(glyphX + dx, glyphY + dy, CLUSTER_DOT_R, 0, Math.PI * 2)
-              ctx.fill()
+          const showGlyphC = zoom >= (glyphThresholds[c.slug] ?? GLYPH_PEPPER_MIN)
+          if (!showGlyphC) {
+            // Amoeba blob — cluster of █ cells, organically jittered
+            const clusterCells = clusterBlobs[c.slug]
+            if (clusterCells?.length) {
+              ctx.save()
+              ctx.font         = `${CELL_H}px ui-monospace, 'Courier New', Courier, monospace`
+              ctx.textBaseline = 'middle'
+              ctx.textAlign    = 'center'
+              ctx.fillStyle    = colorForStatus(c.project.status)
+              for (const bc of clusterCells) {
+                ctx.globalAlpha = 0.50 + 0.14 * Math.sin(t * 0.25 + bc.phase * 0.7)
+                ctx.fillText('█', c.x + bc.homeX, c.y + bc.homeY)
+              }
+              ctx.globalAlpha = 1
+              ctx.restore()
             }
-            ctx.restore()
           } else {
             const cells      = blobCells[c.slug]
             const statusColor = colorForStatus(c.project.status)
@@ -602,7 +648,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           if (hp > 0.01) {
             const gm = glyphMasks[c.slug]
             const baseHW  = gm ? gm.totalHalfW : creatureH * CHAR_ASPECT * 0.5 + GLYPH_MASK_MARGIN
-            const glyphHW = showGlyph ? baseHW : CLUSTER_BOUNDING_R + GLYPH_MASK_MARGIN
+            const glyphHW = showGlyphC ? baseHW : CLUSTER_BOUNDING_R + GLYPH_MASK_MARGIN
             const fullW = textWidthsRef.current[c.slug] ?? 0
             const animW = fullW * hp
             const textX = glyphX + glyphHW + TEXT_GAP

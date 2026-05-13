@@ -1,6 +1,6 @@
 export default {
-  slug: 'thesis',
-  name: 'Thesis',
+  slug: 'biointranet',
+  name: 'Biointranet',
   description: 'Research thesis on ecological phenomenology and landscape perception',
   status: 'active',
   home: { x: 0.40, y: 0.30 },
@@ -20,6 +20,6 @@ export default {
   },
   frame: {
     mode: 'route',
-    target: '/thesis',
+    target: '/biointranet',
   },
 }

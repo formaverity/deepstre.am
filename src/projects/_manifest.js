@@ -4,7 +4,7 @@ import grovematrix from './grovematrix.js'
 import streamwise from './streamwise.js'
 import flo from './flo.js'
 import deepstream from './deepstream.js'
-import thesis from './thesis.js'
+import biointranet from './biointranet.js'
 import murmur from './murmur.js'
 
 const projects = [
@@ -14,7 +14,7 @@ const projects = [
   streamwise,
   flo,
   deepstream,
-  thesis,
+  biointranet,
   murmur,
 ]
 
