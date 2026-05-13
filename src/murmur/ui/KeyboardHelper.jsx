@@ -5,25 +5,32 @@ import { audioEngine } from '@/murmur/audio/AudioEngine.js'
 const SHORTCUTS = [
   { key: 'space', label: 'play / freeze' },
   { key: 'm',     label: 'mode' },
+  { key: 'g',     label: 'grid' },
   { key: 'i',     label: 'info' },
   { key: 'r',     label: 'reset cam' },
   { key: '?',     label: 'help' },
+  { key: 'esc',   label: 'pond' },
 ]
 
 const HELP_ROWS = [
   { key: 'space', reactive: 'play / pause',     sculpt: 'freeze grain position' },
   { key: 'm',     reactive: 'switch to sculpt', sculpt: 'switch to reactive' },
+  { key: 'g',     reactive: '—',                sculpt: 'group grid' },
   { key: 'i',     reactive: 'info card',        sculpt: 'info card' },
   { key: 'r',     reactive: 'reset camera',     sculpt: 'reset camera' },
   { key: '?',     reactive: 'this overlay',     sculpt: 'this overlay' },
-  { key: 'esc',   reactive: 'close overlay',    sculpt: 'close overlay' },
+  { key: 'esc',   reactive: 'close / pond',     sculpt: 'close / pond' },
 ]
 
-export default function KeyboardHelper() {
+export default function KeyboardHelper({ onNavigateToPond }) {
   const [visible,  setVisible]  = useState(true)
   const [helpOpen, setHelpOpen] = useState(false)
-  const helpOpenRef = useRef(false)
-  const fadeTimer   = useRef(null)
+  const helpOpenRef        = useRef(false)
+  const navigateToPondRef  = useRef(onNavigateToPond)
+  const fadeTimer          = useRef(null)
+
+  // Keep ref current so the keydown closure always calls the latest version
+  useEffect(() => { navigateToPondRef.current = onNavigateToPond }, [onNavigateToPond])
 
   // Auto-fade hints after 5s
   useEffect(() => {
@@ -51,6 +58,8 @@ export default function KeyboardHelper() {
         state.setMode(state.mode === 'reactive' ? 'sculpt' : 'reactive')
       } else if (e.key === 'i' || e.key === 'I') {
         state.setInfoOpen(!state.infoOpen)
+      } else if (e.key === 'g' || e.key === 'G') {
+        if (state.mode === 'sculpt') state.toggleGroupGrid()
       } else if (e.key === 'r' || e.key === 'R') {
         state.resetCamera()
       } else if (e.key === '?') {
@@ -58,8 +67,15 @@ export default function KeyboardHelper() {
         helpOpenRef.current = next
         setHelpOpen(next)
       } else if (e.key === 'Escape') {
-        helpOpenRef.current = false
-        setHelpOpen(false)
+        // Priority: 1) close help overlay, 2) close info card, 3) navigate to pond
+        if (helpOpenRef.current) {
+          helpOpenRef.current = false
+          setHelpOpen(false)
+        } else if (state.infoOpen) {
+          state.setInfoOpen(false)
+        } else {
+          navigateToPondRef.current?.()
+        }
       }
     }
 
@@ -112,6 +128,9 @@ export default function KeyboardHelper() {
                 ))}
               </tbody>
             </table>
+            <p className="murmur-help-mouse-hint">
+              click+hold: chord &nbsp;·&nbsp; drag while held: filter &nbsp;·&nbsp; ChordPicker for voicing
+            </p>
           </div>
         </div>
       )}

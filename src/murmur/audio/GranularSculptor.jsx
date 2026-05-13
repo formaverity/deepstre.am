@@ -4,30 +4,47 @@ import * as THREE from 'three'
 import useMurmurStore from '@/murmur/store/useMurmurStore.js'
 import { audioEngine } from './AudioEngine.js'
 
-// ── Tunable mapping constants ─────────────────────────────────────────────
-// Edit these to change how camera motion maps to grain parameters.
+// ── Camera → grain parameter mapping ─────────────────────────────────────────
 
 export const MAPPING = {
-  // Elevation angle → playbackRate: looking down = slow, up = fast
-  elevationToRate: { low: 0.6, high: 1.6 },
-
-  // Camera distance → grain size: close = tiny grains (texture), far = long grains (phrases)
+  elevationToRate:     { low: 0.6, high: 1.6 },
   distanceToGrainSize: { near: 0.02, far: 0.25, nearDist: 0.5, farDist: 3.0 },
-
-  // Smoothed camera speed → overlap density: still = lush, fast = sparse/stuttery
-  speedToOverlap: { still: 0.6, fast: 0.15, fastThreshold: 0.02 },
-
-  // Detune in cents per unit of (playbackRate − 1.0) — keeps pitch shifts organic
-  detuneCoefficient: 200,
+  speedToOverlap:      { still: 0.6, fast: 0.15, fastThreshold: 0.02 },
+  detuneCoefficient:   200,
 }
 
-// ── Hook (must run inside R3F Canvas via useFrame) ────────────────────────
+// ── Color-to-pitch resonance constants ────────────────────────────────────────
+
+export const COLOR_MAPPING = {
+  baseSemitone:       60,    // MIDI C4 = reference
+  resonanceThreshold: 0.2,   // below this, no visual response
+  impulseScale:       4.0,
+  maxMagnify:         2.5,
+}
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+function circularDist(a, b) {
+  const d = Math.abs(a - b)
+  return Math.min(d, 12 - d)
+}
+
+function pitchLabel(pitchClass, octaveOffset) {
+  const note = NOTE_NAMES[Math.round(((pitchClass % 12) + 12) % 12)]
+  const oct  = octaveOffset >= 0 ? `+${octaveOffset}` : `${octaveOffset}`
+  return `${note} ${oct}`
+}
+
+// Reuse Float32Array across frames — avoids GC churn
+const _resonances = new Float32Array(16)
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useSculptDriver({ enabled, uniformsRef }) {
   const frameCount = useRef(0)
 
   useFrame(() => {
-    // When not in sculpt mode, decay sculpt shader uniforms back to 0
+    // When not in sculpt mode, decay sculpt shader uniforms and reset resonance
     if (!enabled) {
       if (uniformsRef?.current) {
         const u = uniformsRef.current.uniforms
@@ -39,24 +56,22 @@ export function useSculptDriver({ enabled, uniformsRef }) {
     }
 
     const { position: camPos, speed } = useMurmurStore.getState().cameraState
-
     const r = Math.sqrt(camPos.x ** 2 + camPos.y ** 2 + camPos.z ** 2)
     if (r < 0.001) return
 
-    // Spherical coordinates of the camera
-    const azimuth   = Math.atan2(camPos.x, camPos.z)                             // −π..π
-    const elevation = Math.asin(THREE.MathUtils.clamp(camPos.y / r, -1, 1))      // −π/2..π/2
+    const azimuth   = Math.atan2(camPos.x, camPos.z)
+    const elevation = Math.asin(THREE.MathUtils.clamp(camPos.y / r, -1, 1))
 
-    // ── Audio mappings ───────────────────────────────────────────────────────
+    // ── Audio mappings ────────────────────────────────────────────────────────
 
     const positionFraction = (azimuth + Math.PI) / (2 * Math.PI)
 
     const { elevationToRate } = MAPPING
-    const elevNorm    = (elevation + Math.PI / 2) / Math.PI                       // 0..1
+    const elevNorm    = (elevation + Math.PI / 2) / Math.PI
     const playbackRate = elevationToRate.low + elevNorm * (elevationToRate.high - elevationToRate.low)
 
     const { near, far, nearDist, farDist } = MAPPING.distanceToGrainSize
-    const distT     = THREE.MathUtils.clamp((r - nearDist) / (farDist - nearDist), 0, 1)
+    const distT    = THREE.MathUtils.clamp((r - nearDist) / (farDist - nearDist), 0, 1)
     const grainSize = THREE.MathUtils.lerp(near, far, distT)
 
     const { still, fast, fastThreshold } = MAPPING.speedToOverlap
@@ -71,25 +86,58 @@ export function useSculptDriver({ enabled, uniformsRef }) {
       grainSize, overlap, playbackRate, detune,
     })
 
-    // ── Shader uniforms — spatial visual feedback ────────────────────────────
+    // ── Shader uniforms ───────────────────────────────────────────────────────
+
     if (uniformsRef?.current) {
       const u = uniformsRef.current.uniforms
-      // elevation: -1 (looking down) to +1 (looking up)
-      const elevShader = THREE.MathUtils.clamp(elevation / (Math.PI / 2), -1, 1)
-      // distance: 0 (near) to 1 (far), using same near/far as grainSize mapping
-      const distShader = distT
-      // speed: 0 (still) to 1 (fast), using same threshold
+      const elevShader  = THREE.MathUtils.clamp(elevation / (Math.PI / 2), -1, 1)
+      const distShader  = distT
       const speedShader = speedT
-
       if (u.uSculptElev)  u.uSculptElev.value  = elevShader
       if (u.uSculptDist)  u.uSculptDist.value  = distShader
       if (u.uSculptSpeed) u.uSculptSpeed.value = speedShader
     }
 
-    // Throttle store writes to ~10 fps — HUD doesn't need 60 fps updates
+    // ── Color-affinity resonance → per-group visual response ─────────────────
+
+    const totalSemitones   = Math.log2(playbackRate) * 12 + detune / 100
+    const currentPitchClass = ((totalSemitones % 12) + 12) % 12
+    const currentOctave     = Math.floor(totalSemitones / 12)
+
+    const store      = useMurmurStore.getState()
+    const affinities = store.cloud?.groupAffinities
+    let litGroups    = 0
+
+    _resonances.fill(0)
+    if (affinities) {
+      for (let i = 0; i < 16; i++) {
+        const { pitchClass, octave, affinityStrength } = affinities[i]
+        const pd = circularDist(currentPitchClass, pitchClass)
+        const od = Math.abs(currentOctave - octave)
+        const raw = Math.max(0, 1 - (pd / 6 + od / 3)) * affinityStrength
+        _resonances[i] = raw > COLOR_MAPPING.resonanceThreshold ? raw : 0
+        if (_resonances[i] > 0.3) litGroups++
+      }
+    }
+
+    // Write sculpt effect params for PointCloud to consume next frame
+    store.effectParamsRef.current = {
+      returnForce:      10.0,
+      explodeStrength:  0,  explodeGroupMask:  0,
+      dissolveRate:     0,  dissolveGroupMask: 0,
+      magnifyTarget:    0,  magnifyGroupMask:  0,
+      chopAdvance:      0,  chopGroupMask:     0,
+      sculptMode:       1,
+      sculptResonance:  _resonances,
+      sculptImpulse:    COLOR_MAPPING.impulseScale,
+      sculptMaxMag:     COLOR_MAPPING.maxMagnify,
+    }
+
+    // ── Throttled store write (~10 fps) ───────────────────────────────────────
+
     frameCount.current++
     if (frameCount.current % 6 === 0) {
-      useMurmurStore.getState().setSculptParams({
+      store.setSculptParams({
         positionFraction,
         playbackRate,
         grainSize,
@@ -98,12 +146,14 @@ export function useSculptDriver({ enabled, uniformsRef }) {
         elevation,
         distance: r,
         speed,
+        currentPitch: pitchLabel(currentPitchClass, currentOctave),
+        litGroups,
       })
     }
   })
 }
 
-// ── Component (sibling inside Canvas, like ReactiveDriver) ────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function SculptDriver() {
   const mode     = useMurmurStore(s => s.mode)

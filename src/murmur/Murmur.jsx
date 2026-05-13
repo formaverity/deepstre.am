@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import useMurmurStore from '@/murmur/store/useMurmurStore.js'
 import { audioEngine } from '@/murmur/audio/AudioEngine.js'
 import { useSEO } from '@/lib/useSEO.js'
@@ -10,6 +10,8 @@ import AudioUpload from './ui/AudioUpload.jsx'
 import SculptHUD from './ui/SculptHUD.jsx'
 import CloudPicker from './ui/CloudPicker.jsx'
 import KeyboardHelper from './ui/KeyboardHelper.jsx'
+import MappingsPanel from './ui/MappingsPanel.jsx'
+import ChordPicker from './ui/ChordPicker.jsx'
 import './murmur.css'
 
 // Mode-default camera positions
@@ -30,6 +32,8 @@ export default function Murmur() {
   const setCameraTarget  = useMurmurStore(s => s.setCameraTarget)
   const setGrainFrozen   = useMurmurStore(s => s.setGrainFrozen)
 
+  const navigate = useNavigate()
+
   useSEO({
     title:       'MURMUR — deepstre.am',
     description: 'A point cloud audio instrument. LiDAR scans of real places, driven by whatever sound you bring.',
@@ -38,6 +42,24 @@ export default function Murmur() {
 
   const [vignetteActive, setVignetteActive] = useState(false)
   const [noticeText, setNoticeText]         = useState(null)
+
+  // Navigate back to pond — fade audio if active, save session state, then route
+  const navigateToPond = useCallback(async () => {
+    try {
+      const state = useMurmurStore.getState()
+      sessionStorage.setItem('murmur_mode', state.mode)
+      if (state.sculptParams) {
+        sessionStorage.setItem('murmur_sculpt_params', JSON.stringify(state.sculptParams))
+      }
+    } catch (_) {}
+
+    if (audioEngine.isAnyAudioActive) {
+      audioEngine.fadeOut(0.2)
+      await new Promise(r => setTimeout(r, 200))
+    }
+    audioEngine.fadeIn(0.001)  // reset volume for next visit
+    navigate('/')
+  }, [navigate])
 
   const firstMount    = useRef(true)
   const swapTimer     = useRef(null)
@@ -50,6 +72,21 @@ export default function Murmur() {
   useEffect(() => {
     loadCloud('default-grove')
   }, [loadCloud])
+
+  // Restore session state from previous visit and reset volume
+  useEffect(() => {
+    audioEngine.fadeIn(0.001)  // reset in case previous exit left volume faded
+    try {
+      const savedMode = sessionStorage.getItem('murmur_mode')
+      if (savedMode === 'reactive' || savedMode === 'sculpt') {
+        useMurmurStore.getState().setMode(savedMode)
+      }
+      const savedParams = sessionStorage.getItem('murmur_sculpt_params')
+      if (savedParams) {
+        useMurmurStore.getState().setSculptParams(JSON.parse(savedParams))
+      }
+    } catch (_) {}
+  }, [])
 
   // Decimation notice auto-dismiss
   useEffect(() => {
@@ -129,15 +166,23 @@ export default function Murmur() {
 
       {/* Top-left: breadcrumb */}
       <nav className="murmur-breadcrumb" aria-label="breadcrumb">
-        <Link to="/" className="murmur-breadcrumb-link">deepstre.am</Link>
-        <span className="murmur-breadcrumb-sep">/</span>
-        <span className="murmur-breadcrumb-current">murmur</span>
+        <Link to="/" className="murmur-breadcrumb-link">← pond</Link>
       </nav>
 
-      {/* Top-right: status + cloud picker */}
-      <div className="murmur-status" aria-label="audio status">
-        <span className={`murmur-status-dot${cloud ? ' murmur-status-dot--ready' : ''}`} />
-        <span>{cloud ? 'ready' : 'idle'}</span>
+      {/* Top-right: status + close button */}
+      <div className="murmur-top-right-cluster">
+        <div className="murmur-status" aria-label="audio status">
+          <span className={`murmur-status-dot${cloud ? ' murmur-status-dot--ready' : ''}`} />
+          <span>{cloud ? 'ready' : 'idle'}</span>
+        </div>
+        <button
+          className="murmur-close-btn"
+          onClick={navigateToPond}
+          title="return to pond"
+          aria-label="return to pond"
+        >
+          ✕
+        </button>
       </div>
       <CloudPicker />
 
@@ -232,8 +277,16 @@ export default function Murmur() {
         </>
       )}
 
+      {/* Left-side panel stack: mappings (reactive only) + chord picker (both modes) */}
+      {cloud && (
+        <div className="murmur-left-panels">
+          {mode === 'reactive' && <MappingsPanel />}
+          <ChordPicker />
+        </div>
+      )}
+
       {/* Keyboard shortcuts helper (desktop only, fades after 5s) */}
-      {cloud && <KeyboardHelper />}
+      {cloud && <KeyboardHelper onNavigateToPond={navigateToPond} />}
 
     </div>
   )

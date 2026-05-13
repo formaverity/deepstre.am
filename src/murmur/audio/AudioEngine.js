@@ -15,6 +15,10 @@ class AudioEngine {
     this._startedAt     = 0
     this._lastKnownTime = 0
     this._smooth        = { bass: 0, lowMid: 0, highMid: 0, treble: 0 }
+
+    this.chordVoices      = []
+    this.chordFilter      = null
+    this._chordMasterGain = null
   }
 
   async start() {
@@ -24,6 +28,7 @@ class AudioEngine {
   // ── Buffer loading ──────────────────────────────────────────────────────
 
   async loadBuffer(input) {
+    this.stopChord()
     if (this.isPlaying) this.player.stop()
     this._pauseOffset   = 0
     this._lastKnownTime = 0
@@ -134,6 +139,84 @@ class AudioEngine {
     }
   }
 
+  // ── Chord layer ─────────────────────────────────────────────────────────
+
+  startChord({ rootSemitone, intervals, voices, position }) {
+    this.stopChord()
+    if (!this.buffer || !this.analyzer) return
+
+    const masterGain = new Tone.Gain(Tone.dbToGain(-12))
+    const filter     = new Tone.Filter({ frequency: 12000, type: 'lowpass', Q: 1 })
+    masterGain.connect(filter)
+    filter.connect(this.analyzer)
+
+    this.chordFilter      = filter
+    this._chordMasterGain = masterGain
+
+    const baseSemitones = rootSemitone - 60
+    const voiceCount    = Math.min(voices, intervals.length)
+
+    for (let i = 0; i < voiceCount; i++) {
+      const totalSt = baseSemitones + intervals[i]
+      const rate    = Math.max(0.125, Math.min(8.0, Math.pow(2, totalSt / 12)))
+
+      const gp = new Tone.GrainPlayer(this.buffer)
+      gp.loop         = true
+      gp.grainSize    = 0.08
+      gp.overlap      = 0.5
+      gp.playbackRate = rate
+
+      if (position !== undefined && this.duration) {
+        const pos     = Math.max(0, Math.min(0.999, position)) * this.duration
+        const winSize = Math.min(0.3, Math.max(0.05, this.duration * 0.08))
+        gp.loopStart  = pos
+        gp.loopEnd    = Math.min(this.duration, pos + winSize)
+      }
+
+      const voiceGain = new Tone.Gain(1.0)
+      gp.connect(voiceGain)
+      voiceGain.connect(masterGain)
+      gp.start()
+
+      this.chordVoices.push({ grainPlayer: gp, gain: voiceGain })
+    }
+  }
+
+  updateChord({ filterCutoff, filterQ }) {
+    if (!this.chordFilter) return
+    if (filterCutoff !== undefined) {
+      this.chordFilter.frequency.rampTo(Math.max(20, Math.min(20000, filterCutoff)), 0.05)
+    }
+    if (filterQ !== undefined) {
+      this.chordFilter.Q.rampTo(Math.max(0.1, Math.min(20, filterQ)), 0.05)
+    }
+  }
+
+  stopChord() {
+    const voices = this.chordVoices.splice(0)
+    if (!voices.length) return
+
+    const fadeDur = 0.4
+    voices.forEach(v => {
+      try { v.gain.gain.rampTo(0, fadeDur) } catch (_) {}
+    })
+
+    const filter = this.chordFilter
+    const master = this._chordMasterGain
+    this.chordFilter      = null
+    this._chordMasterGain = null
+
+    setTimeout(() => {
+      voices.forEach(v => {
+        try { v.grainPlayer.stop() }       catch (_) {}
+        try { v.grainPlayer.disconnect() } catch (_) {}
+        try { v.gain.disconnect() }        catch (_) {}
+      })
+      try { master?.disconnect() } catch (_) {}
+      try { filter?.disconnect() } catch (_) {}
+    }, fadeDur * 1000 + 50)
+  }
+
   // ── Volume fades for clean chain swaps ──────────────────────────────────
 
   fadeOut(duration = 0.15) {
@@ -184,7 +267,9 @@ class AudioEngine {
   }
 
   get isAnyAudioActive() {
-    return this.player?.state === 'started' || this.grainPlayer?.state === 'started'
+    return this.player?.state === 'started'
+        || this.grainPlayer?.state === 'started'
+        || this.chordVoices.length > 0
   }
 
   get currentTime() {

@@ -6,12 +6,13 @@ const REGION_SCALE = [0, 1.0, 0, 0]
 
 // Returns clamped 0..1 brightness after a time-varying fbm wobble.
 // baseBrightness is raw Uint8 (0-255); returned value is normalised float.
-export function shimmerBrightness(baseBrightness, x, y, t, intensity = 0.15, region = 1) {
+// driftX / driftY control the noise advection direction (cursor-biased wind).
+export function shimmerBrightness(baseBrightness, x, y, t, intensity = 0.15, region = 1, driftX = 0.09, driftY = 0.06) {
   const scale = REGION_SCALE[region] ?? 0
   if (scale === 0) return baseBrightness / 255
 
-  // Low-frequency fbm — one noise "cell" spans ~33 field columns
-  const wobble = fbm(x * 0.03 + t * 0.18, y * 0.05 + t * 0.13, 2)
+  // Low-frequency fbm — larger cells (0.02/0.032 vs 0.03/0.05) = broader, calmer waves
+  const wobble = fbm(x * 0.02 + t * driftX, y * 0.032 + t * driftY, 2)
   const delta  = (wobble - 0.5) * 2 * intensity * scale
 
   return Math.max(0, Math.min(1, baseBrightness / 255 + delta))

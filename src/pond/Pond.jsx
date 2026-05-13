@@ -36,7 +36,8 @@ export default function Pond() {
       {loading && <CenteredNote>Loading pond…</CenteredNote>}
       {error   && <CenteredNote error>{error.message} — run the bake tool first</CenteredNote>}
       {field   && <AsciiField field={field} creaturesRef={creaturesRef} creatureDragRef={creatureDragRef} />}
-      {field   && <CameraControls />}
+      <CameraControls />
+      <div className="hint-bar">scroll to zoom · drag to pan</div>
       {import.meta.env.DEV && (
         <a href="/tools/bake-aerial/index.html" target="_blank" rel="noreferrer" className="dev-bake-btn">
           bake

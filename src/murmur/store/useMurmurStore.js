@@ -1,6 +1,42 @@
 import { create } from 'zustand'
 import cloudManifest from '@/murmur/clouds/_manifest.js'
-import { loadPLY, loadPLYFromFile, decimate, normalize } from '@/murmur/clouds/loaders.js'
+import { loadPLY, loadPLYFromFile, decimate, normalize, computeGroupAffinities } from '@/murmur/clouds/loaders.js'
+
+const DEFAULT_CHORD_CONFIG = {
+  preset:          'thirds',
+  isMinor:         false,
+  voices:          3,
+  customIntervals: [0, 4, 7, 12],
+}
+
+function loadChordConfig() {
+  try {
+    const saved = localStorage.getItem('murmur-chord-v1')
+    if (saved) {
+      const p = JSON.parse(saved)
+      if (p.preset && typeof p.voices === 'number') return { ...DEFAULT_CHORD_CONFIG, ...p }
+    }
+  } catch (_) {}
+  return DEFAULT_CHORD_CONFIG
+}
+
+const DEFAULT_MAPPINGS = {
+  explode:  { band: 'bass',    strength: 0.7, groupMask: 65535 },
+  dissolve: { band: 'lowMid',  strength: 0.4, groupMask: 21845 },
+  magnify:  { band: 'treble',  strength: 0.8, groupMask: 255   },
+  chop:     { band: 'highMid', strength: 0.3, groupMask: 0     },
+}
+
+function loadMappings() {
+  try {
+    const saved = localStorage.getItem('murmur-mappings-v1')
+    if (saved) {
+      const p = JSON.parse(saved)
+      if (p.explode && p.dissolve && p.magnify && p.chop) return p
+    }
+  } catch (_) {}
+  return DEFAULT_MAPPINGS
+}
 
 const USER_CLOUD_CAP = 2_000_000
 const USER_CLOUD_TARGET = 300_000
@@ -45,11 +81,12 @@ const useMurmurStore = create((set, get) => ({
           .catch(() => null),
       ])
 
-      const decimated = decimate(raw, targetPoints)
-      const normInfo  = normalize(decimated)
+      const decimated       = decimate(raw, targetPoints)
+      const normInfo        = normalize(decimated)
+      const groupAffinities = computeGroupAffinities(decimated)
 
       set({
-        cloud:              { id, ...decimated, meta, normInfo },
+        cloud:              { id, ...decimated, meta, normInfo, groupAffinities },
         cloudLoading:       false,
         currentCloudSource: 'default',
       })
@@ -70,9 +107,10 @@ const useMurmurStore = create((set, get) => ({
         notice = `Cloud decimated from ${raw.count.toLocaleString()} → ${decimated.count.toLocaleString()} points`
       }
 
-      const normInfo = normalize(decimated)
+      const normInfo        = normalize(decimated)
+      const groupAffinities = computeGroupAffinities(decimated)
       const id = `user-${Date.now()}`
-      const cloudObj = { id, ...decimated, meta: userMeta, normInfo }
+      const cloudObj = { id, ...decimated, meta: userMeta, normInfo, groupAffinities }
 
       set(s => ({
         cloud:              cloudObj,
@@ -103,6 +141,46 @@ const useMurmurStore = create((set, get) => ({
   // Set by PointCloud on mount; audio engine writes uniform values via ref.current
   uniforms: { ref: null },
   setUniformsRef: (ref) => set(s => ({ uniforms: { ...s.uniforms, ref } })),
+
+  // ── Effect mappings (band → effect assignment, persisted) ─────────────
+  mappings: loadMappings(),
+  setMappings: (m) => {
+    try { localStorage.setItem('murmur-mappings-v1', JSON.stringify(m)) } catch (_) {}
+    set({ mappings: m })
+  },
+  resetMappings: () => {
+    try { localStorage.setItem('murmur-mappings-v1', JSON.stringify(DEFAULT_MAPPINGS)) } catch (_) {}
+    set({ mappings: DEFAULT_MAPPINGS })
+  },
+
+  // ── Chord voicing config (persisted) ─────────────────────────────────
+  chordConfig: loadChordConfig(),
+  setChordConfig: (c) => {
+    try { localStorage.setItem('murmur-chord-v1', JSON.stringify(c)) } catch (_) {}
+    set({ chordConfig: c })
+  },
+
+  // ── Per-frame chord visual params (non-reactive mutable ref) ─────────
+  chordParamsRef: { current: { active: false, groupMask: 0, magnifyTarget: 0, worldPoint: null } },
+
+  // ── Per-frame effect params (non-reactive mutable ref) ────────────────
+  // ReactiveAnalyzer or SculptDriver writes this each frame; PointCloud reads it.
+  effectParamsRef: { current: {
+    returnForce:      10.0,
+    explodeStrength:  0,  explodeGroupMask:  65535,
+    dissolveRate:     0,  dissolveGroupMask: 65535,
+    magnifyTarget:    0,  magnifyGroupMask:  65535,
+    chopAdvance:      0,  chopGroupMask:     0,
+    sculptMode:       0,
+    sculptResonance:  null,
+    sculptImpulse:    4.0,
+    sculptMaxMag:     2.5,
+  }},
+
+  // ── Sculpt group-grid overlay ─────────────────────────────────────────
+  showGroupGrid:   false,
+  setShowGroupGrid: (v) => set({ showGroupGrid: v }),
+  toggleGroupGrid:  () => set(s => ({ showGroupGrid: !s.showGroupGrid })),
 
   // ── Sculpt HUD state (written ~10fps from GranularSculptor) ──────────
   sculptParams: null,

@@ -43,6 +43,18 @@ export default function SculptHUD() {
         <span className="murmur-hud-label">speed</span>
         <span className="murmur-hud-value">{params.speed.toFixed(3)}</span>
       </div>
+      {params.currentPitch != null && (
+        <div className="murmur-hud-row">
+          <span className="murmur-hud-label">pitch</span>
+          <span className="murmur-hud-value">{params.currentPitch}</span>
+        </div>
+      )}
+      {params.litGroups != null && (
+        <div className="murmur-hud-row">
+          <span className="murmur-hud-label">lit</span>
+          <span className="murmur-hud-value">{params.litGroups} / 16</span>
+        </div>
+      )}
     </div>
   )
 }

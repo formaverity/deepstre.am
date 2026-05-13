@@ -4,10 +4,15 @@ import CameraRig from './CameraRig.jsx'
 import ReactiveDriver from '@/murmur/audio/ReactiveAnalyzer.jsx'
 import SculptDriver from '@/murmur/audio/GranularSculptor.jsx'
 import SculptParticles from './SculptParticles.jsx'
+import SculptOverlay from './SculptOverlay.jsx'
 import AudioAtmos from './AudioAtmos.jsx'
 import OrbitLights from './OrbitLights.jsx'
+import ChordController, { ChordRing } from './ChordController.jsx'
+import DitherBleed from './DitherBleed.jsx'
 
 const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width:639px)').matches
+
+const USE_GPGPU = true  // set false to fall back to legacy shader path
 
 export default function PointCloudScene() {
   return (
@@ -22,11 +27,15 @@ export default function PointCloudScene() {
         <ambientLight intensity={0.4} />
         <AudioAtmos />
         <OrbitLights />
-        <PointCloud />
+        <PointCloud useGpgpu={USE_GPGPU} />
         <SculptParticles />
+        <SculptOverlay />
         <CameraRig />
         <ReactiveDriver />
         <SculptDriver />
+        <ChordController />
+        <ChordRing />
+        <DitherBleed />
       </Canvas>
     </div>
   )

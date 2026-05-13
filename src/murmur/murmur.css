@@ -46,12 +46,19 @@
   color: rgba(200, 213, 192, 0.55);
 }
 
-/* ── Status indicator (top-right) ────────────────────────────────────── */
+/* ── Top-right cluster: status + close button ────────────────────────── */
+
+.murmur-top-right-cluster {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  z-index: 10;
+}
 
 .murmur-status {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -59,6 +66,31 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: rgba(200, 213, 192, 0.25);
+}
+
+.murmur-close-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 0.5px solid rgba(200, 213, 192, 0.18);
+  border-radius: 4px;
+  color: rgba(200, 213, 192, 0.35);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.murmur-close-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(200, 213, 192, 0.4);
+  color: rgba(200, 213, 192, 0.65);
 }
 
 .murmur-status-dot {
@@ -502,7 +534,7 @@
 
 .murmur-picker {
   position: absolute;
-  top: 2.4rem;
+  top: 2.8rem;
   right: 1rem;
   z-index: 20;
   display: flex;
@@ -952,12 +984,413 @@
   padding-right: 1.2rem;
 }
 
+.murmur-help-mouse-hint {
+  margin: 0.9rem 0 0;
+  font-size: 8px;
+  letter-spacing: 0.07em;
+  color: rgba(200, 213, 192, 0.3);
+  border-top: 0.5px solid rgba(200, 213, 192, 0.08);
+  padding-top: 0.65rem;
+}
+
+/* ── Left-side panel stack ────────────────────────────────────────────── */
+
+.murmur-left-panels {
+  position: absolute;
+  top: 2.5rem;
+  left: 1rem;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 220px;
+}
+
+/* When inside the stack, panels use static flow */
+.murmur-left-panels .mp-root,
+.murmur-left-panels .cp-root {
+  position: static;
+  width: 100%;
+}
+
+/* ── Chord picker ─────────────────────────────────────────────────────── */
+
+.cp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: rgba(7, 11, 8, 0.65);
+  backdrop-filter: blur(8px);
+  border: 0.5px solid rgba(200, 213, 192, 0.15);
+  color: rgba(200, 213, 192, 0.38);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.28rem 0.55rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.cp-header:hover {
+  color: rgba(200, 213, 192, 0.65);
+  border-color: rgba(200, 213, 192, 0.32);
+}
+
+.cp-toggle-glyph {
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.cp-body {
+  border: 0.5px solid rgba(200, 213, 192, 0.12);
+  border-top: none;
+  background: rgba(7, 11, 8, 0.82);
+  backdrop-filter: blur(10px);
+  padding: 0.5rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.cp-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.cp-quality-btn {
+  flex: 1;
+  background: rgba(200, 213, 192, 0.04);
+  border: 0.5px solid rgba(200, 213, 192, 0.15);
+  color: rgba(200, 213, 192, 0.35);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  padding: 0.2rem 0;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.cp-quality-btn--active {
+  color: rgba(185, 160, 224, 0.85);
+  border-color: rgba(185, 160, 224, 0.45);
+  background: rgba(185, 160, 224, 0.08);
+}
+
+.cp-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.cp-preset-btn {
+  background: rgba(200, 213, 192, 0.04);
+  border: 0.5px solid rgba(200, 213, 192, 0.15);
+  color: rgba(200, 213, 192, 0.35);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.cp-preset-btn--active {
+  color: rgba(185, 160, 224, 0.85);
+  border-color: rgba(185, 160, 224, 0.45);
+  background: rgba(185, 160, 224, 0.08);
+}
+
+.cp-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+
+.cp-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.cp-custom-label {
+  font-size: 8px;
+  color: rgba(200, 213, 192, 0.25);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  min-width: 16px;
+}
+
+.cp-custom-input {
+  background: rgba(200, 213, 192, 0.04);
+  border: 0.5px solid rgba(200, 213, 192, 0.18);
+  color: rgba(200, 213, 192, 0.6);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.3rem;
+  width: 52px;
+  outline: none;
+  -moz-appearance: textfield;
+  transition: border-color 0.15s;
+}
+
+.cp-custom-input::-webkit-inner-spin-button,
+.cp-custom-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+.cp-custom-input:focus { border-color: rgba(185, 160, 224, 0.4); }
+
+.cp-custom-unit {
+  font-size: 8px;
+  color: rgba(200, 213, 192, 0.2);
+  letter-spacing: 0.06em;
+}
+
+.cp-row--voices { margin-top: 0.1rem; }
+
+.cp-label {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(200, 213, 192, 0.25);
+  flex-shrink: 0;
+  min-width: 36px;
+}
+
+.cp-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 1px;
+  background: rgba(200, 213, 192, 0.18);
+  outline: none;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.cp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(185, 160, 224, 0.75);
+  cursor: pointer;
+}
+
+.cp-slider::-moz-range-thumb {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(185, 160, 224, 0.75);
+  border: none;
+  cursor: pointer;
+}
+
+.cp-slider-val {
+  font-size: 8px;
+  color: rgba(200, 213, 192, 0.35);
+  min-width: 10px;
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Mappings panel (left side, reactive mode only) ──────────────────── */
+
+.mp-root {
+  position: absolute;
+  top: 2.5rem;
+  left: 1rem;
+  z-index: 10;
+  width: 220px;
+}
+
+.mp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: rgba(7, 11, 8, 0.65);
+  backdrop-filter: blur(8px);
+  border: 0.5px solid rgba(200, 213, 192, 0.15);
+  color: rgba(200, 213, 192, 0.38);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.28rem 0.55rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.mp-header:hover {
+  color: rgba(200, 213, 192, 0.65);
+  border-color: rgba(200, 213, 192, 0.32);
+}
+
+.mp-toggle-glyph {
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.mp-body {
+  border: 0.5px solid rgba(200, 213, 192, 0.12);
+  border-top: none;
+  background: rgba(7, 11, 8, 0.82);
+  backdrop-filter: blur(10px);
+  padding: 0.5rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.mp-effect {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.mp-effect + .mp-effect {
+  padding-top: 0.5rem;
+  border-top: 0.5px solid rgba(200, 213, 192, 0.07);
+}
+
+.mp-effect-name {
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  color: rgba(185, 160, 224, 0.65);
+}
+
+.mp-effect-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.mp-label {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(200, 213, 192, 0.25);
+  flex-shrink: 0;
+}
+
+.mp-select {
+  background: rgba(200, 213, 192, 0.04);
+  border: 0.5px solid rgba(200, 213, 192, 0.18);
+  color: rgba(200, 213, 192, 0.6);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.2rem;
+  cursor: pointer;
+  outline: none;
+  max-width: 58px;
+  flex-shrink: 0;
+}
+
+.mp-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 1px;
+  background: rgba(200, 213, 192, 0.18);
+  outline: none;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.mp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(185, 160, 224, 0.75);
+  cursor: pointer;
+}
+
+.mp-slider::-moz-range-thumb {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(185, 160, 224, 0.75);
+  border: none;
+  cursor: pointer;
+}
+
+.mp-slider-val {
+  font-size: 8px;
+  color: rgba(200, 213, 192, 0.35);
+  letter-spacing: 0.03em;
+  min-width: 22px;
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.mp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 13px);
+  gap: 2px;
+}
+
+.mp-cell {
+  width: 13px;
+  height: 13px;
+  background: rgba(200, 213, 192, 0.06);
+  border: 0.5px solid rgba(200, 213, 192, 0.12);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.1s, border-color 0.1s;
+  border-radius: 1px;
+}
+
+.mp-cell:hover {
+  background: rgba(200, 213, 192, 0.14);
+}
+
+.mp-cell--on {
+  background: rgba(185, 160, 224, 0.42);
+  border-color: rgba(185, 160, 224, 0.58);
+}
+
+.mp-cell--on:hover {
+  background: rgba(185, 160, 224, 0.6);
+}
+
+.mp-reset {
+  background: none;
+  border: 0.5px solid rgba(200, 213, 192, 0.12);
+  color: rgba(200, 213, 192, 0.22);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  padding: 0.22rem 0.45rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  align-self: flex-start;
+  margin-top: 0.15rem;
+}
+
+.mp-reset:hover {
+  color: rgba(200, 213, 192, 0.55);
+  border-color: rgba(200, 213, 192, 0.3);
+}
+
 /* ── Mobile ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 639px) {
   /* Hide complex UI on small screens */
   .murmur-hud             { display: none; }
   .murmur-keyboard-helper { display: none; }
+  .murmur-left-panels     { display: none; }
+  .mp-root                { display: none; }
 
   /* Ensure bottom controls clear mobile browser chrome */
   .murmur-bottom-center {

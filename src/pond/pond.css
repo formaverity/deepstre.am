@@ -25,84 +25,18 @@
   border-radius: 2px;
 }
 
-/* ── Camera controls (bottom-right) ─────────────────────────────────── */
+/* ── Zoom readout (bottom-right) ─────────────────────────────────────── */
 
-.camera-controls {
+.zoom-readout {
   position: absolute;
   bottom: 1rem;
   right: 1rem;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
   font-family: ui-monospace, 'Courier New', Courier, monospace;
   font-size: 11px;
-  color: var(--color-fg, #c8d5c0);
-  background: rgba(13, 20, 16, 0.72);
-  border: 0.5px solid rgba(159, 225, 203, 0.18);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border-radius: 2px;
-  pointer-events: all;
-}
-
-.zone-label {
   color: var(--color-muted, #5a7060);
   letter-spacing: 0.06em;
+  pointer-events: none;
   white-space: nowrap;
-}
-
-.zoom-buttons {
-  display: flex;
-  gap: 4px;
-}
-
-.zoom-btn {
-  width: 26px;
-  height: 26px;
-  background: rgba(159, 225, 203, 0.07);
-  border: 0.5px solid rgba(159, 225, 203, 0.2);
-  color: #9FE1CB;
-  font-size: 15px;
-  line-height: 1;
-  font-family: inherit;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 1px;
-  transition: background 0.1s;
-}
-
-.zoom-btn:hover {
-  background: rgba(159, 225, 203, 0.16);
-}
-
-.zoom-btn:active {
-  background: rgba(159, 225, 203, 0.25);
-}
-
-.zoom-btn--fx {
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  color: rgba(159, 225, 203, 0.4);
-  border-color: rgba(159, 225, 203, 0.14);
-  transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
-}
-
-.zoom-btn--fx.active {
-  background: rgba(159, 225, 203, 0.15);
-  color: #9FE1CB;
-  border-color: rgba(159, 225, 203, 0.5);
-  box-shadow: 0 0 10px rgba(159, 225, 203, 0.18), inset 0 0 5px rgba(159, 225, 203, 0.06);
-  text-shadow: 0 0 8px rgba(159, 225, 203, 0.6);
-  animation: fx-pulse 2.4s ease-in-out infinite;
-}
-
-@keyframes fx-pulse {
-  0%, 100% { border-color: rgba(159, 225, 203, 0.45); box-shadow: 0 0 8px rgba(159, 225, 203, 0.14), inset 0 0 4px rgba(159, 225, 203, 0.05); }
-  50%       { border-color: rgba(159, 225, 203, 0.75); box-shadow: 0 0 14px rgba(159, 225, 203, 0.28), inset 0 0 7px rgba(159, 225, 203, 0.10); }
 }
 
 /* ── Dev bake shortcut (top-left, dev only) ──────────────────────────── */

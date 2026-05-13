@@ -6,6 +6,11 @@ export default {
   home: { x: 0.28, y: 0.68 },
   glyph: {
     ascii: '☰',
+    blob: [
+      '┌─┐',
+      '│≡│',
+      '└─┘',
+    ],
     svg: `<g stroke="#AFA9EC" stroke-width="1.2" fill="none" stroke-linecap="round"><rect x="-7" y="-9" width="14" height="18" rx="1"/><line x1="-4" y1="-3" x2="4" y2="-3"/><line x1="-4" y1="1" x2="4" y2="1"/><line x1="-4" y1="5" x2="4" y2="5"/></g>`,
   },
   behavior: {

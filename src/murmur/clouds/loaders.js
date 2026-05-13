@@ -116,6 +116,54 @@ export function decimate({ positions, colors, count }, targetCount) {
   return { positions: newPos, colors: newCol, count: newCount }
 }
 
+// ── computeGroupAffinities ────────────────────────────────────────────────────
+// After normalize(), positions are in [-1,1]. Computes per-group mean color,
+// converts to HSL, and maps to pitch affinity metadata used by Sculpt mode.
+// Groups use the same 4×4 XZ spatial bins as the GPGPU ParticleSystem.
+
+function rgbToHsl(r, g, b) {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  const l   = (max + min) / 2
+  let h = 0, s = 0
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    if      (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+    else if (max === g) h = ((b - r) / d + 2) / 6
+    else                h = ((r - g) / d + 4) / 6
+  }
+  return { h: h * 360, s, l }
+}
+
+export function computeGroupAffinities({ positions, colors, count }) {
+  const sums = Array.from({ length: 16 }, () => ({ r: 0, g: 0, b: 0, n: 0 }))
+
+  for (let i = 0; i < count; i++) {
+    const x  = positions[i * 3]
+    const z  = positions[i * 3 + 2]
+    const gx = Math.min(3, Math.max(0, Math.floor((x + 1.0) * 2.0)))
+    const gz = Math.min(3, Math.max(0, Math.floor((z + 1.0) * 2.0)))
+    const g  = gx * 4 + gz
+    sums[g].r += colors ? colors[i * 3]     : 0.5
+    sums[g].g += colors ? colors[i * 3 + 1] : 0.5
+    sums[g].b += colors ? colors[i * 3 + 2] : 0.5
+    sums[g].n++
+  }
+
+  return sums.map(({ r, g, b, n }) => {
+    const mr = n > 0 ? r / n : 0.5
+    const mg = n > 0 ? g / n : 0.5
+    const mb = n > 0 ? b / n : 0.5
+    const { h, s, l } = rgbToHsl(mr, mg, mb)
+    return {
+      meanColor:       [mr, mg, mb],
+      pitchClass:      Math.floor((h / 360) * 12) % 12,
+      octave:          Math.floor((l - 0.5) * 4),   // -2..+2
+      affinityStrength: s,
+    }
+  })
+}
+
 // ── normalize ─────────────────────────────────────────────────────────────────
 // Mutates positions in place: recenters at origin, scales longest axis to ±1.
 // Returns { center, scale, origSpan } — origSpan is pre-normalisation dimensions
