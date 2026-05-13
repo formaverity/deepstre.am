@@ -183,6 +183,10 @@ class AudioEngine {
     return this.player?.state === 'started'
   }
 
+  get isAnyAudioActive() {
+    return this.player?.state === 'started' || this.grainPlayer?.state === 'started'
+  }
+
   get currentTime() {
     if (this.isPlaying) {
       const elapsed = Tone.now() - this._startedAt
@@ -212,8 +216,8 @@ class AudioEngine {
 
     const s  = this._smooth
     const sm = (prev, cur) => cur > prev
-      ? prev + (cur - prev) * 0.3
-      : prev + (cur - prev) * 0.05
+      ? prev + (cur - prev) * 0.55
+      : prev + (cur - prev) * 0.08
 
     s.bass    = sm(s.bass,    bass)
     s.lowMid  = sm(s.lowMid,  lowMid)

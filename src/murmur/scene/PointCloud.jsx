@@ -4,6 +4,18 @@ import * as THREE from 'three'
 import useMurmurStore from '@/murmur/store/useMurmurStore.js'
 import { vertexShader, fragmentShader, makeUniforms } from './pointShader.js'
 
+// Returns the array if any sampled value is above a threshold, otherwise null.
+// Handles PLYs that have a color attribute but store it as all-zeros (common in
+// LiDAR exports and unlit photogrammetry captures).
+function usableColors(colors) {
+  if (!colors) return null
+  const limit = Math.min(colors.length, 600)
+  for (let i = 0; i < limit; i++) {
+    if (colors[i] > 0.01) return colors
+  }
+  return null
+}
+
 export default function PointCloud() {
   const cloud         = useMurmurStore(s => s.cloud)
   const setUniformsRef = useMurmurStore(s => s.setUniformsRef)
@@ -13,10 +25,9 @@ export default function PointCloud() {
     vertexShader,
     fragmentShader,
     uniforms,
-    transparent:  true,
-    blending:     THREE.AdditiveBlending,
-    depthWrite:   false,
-    vertexColors: true,
+    transparent: true,
+    blending:    THREE.AdditiveBlending,
+    depthWrite:  false,
   }), [uniforms])
 
   const matRef = useRef(mat)
@@ -31,9 +42,10 @@ export default function PointCloud() {
     if (!cloud) return null
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.BufferAttribute(cloud.positions, 3))
-    if (cloud.colors) {
-      g.setAttribute('color', new THREE.BufferAttribute(cloud.colors, 3))
-    }
+    const colorData = usableColors(cloud.colors)
+      ?? new Float32Array(cloud.count * 3).fill(1)
+    g.setAttribute('color', new THREE.BufferAttribute(colorData, 3))
+    g.computeBoundingSphere()
     return g
   }, [cloud?.id])
 

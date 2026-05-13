@@ -80,6 +80,7 @@ const useMurmurStore = create((set, get) => ({
         currentCloudSource: 'user',
         userClouds:         [...s.userClouds, cloudObj],
         decimationNotice:   notice,
+        cameraResetToken:   s.cameraResetToken + 1,
       }))
     } catch (err) {
       set({ cloudError: err.message, cloudLoading: false })

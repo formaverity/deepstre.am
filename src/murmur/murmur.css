@@ -193,13 +193,23 @@
   cursor: default;
 }
 
+/* ── Bottom-center stack (transport + upload, never overlap) ─────────── */
+
+.murmur-bottom-center {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 10;
+}
+
 /* ── Transport controls (bottom-center) ──────────────────────────────── */
 
 .murmur-transport {
-  position: absolute;
-  bottom: 3.8rem;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -269,15 +279,10 @@
 /* ── Audio upload (bottom-center) ────────────────────────────────────── */
 
 .murmur-upload-wrap {
-  position: absolute;
-  bottom: 1rem;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.4rem;
-  z-index: 10;
 }
 
 .murmur-upload {
@@ -827,7 +832,7 @@
 
 .murmur-keyboard-helper {
   position: absolute;
-  bottom: 6.6rem;
+  bottom: 7.8rem;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -955,12 +960,8 @@
   .murmur-keyboard-helper { display: none; }
 
   /* Ensure bottom controls clear mobile browser chrome */
-  .murmur-upload-wrap {
+  .murmur-bottom-center {
     bottom: 4.5rem;
-  }
-
-  .murmur-transport {
-    bottom: 6.8rem;
   }
 
   /* Mode toggle closer to top edge */

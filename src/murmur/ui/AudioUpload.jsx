@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { audioEngine } from '@/murmur/audio/AudioEngine.js'
 
-const SAMPLE_TRACKS = []
+const SAMPLE_TRACKS = [
+  { url: '/clouds/02_Radiators.mp3', name: '02 Radiators' },
+]
 
 const WAVE = '▁▂▃▄▅▆▇█▇▆▅▄▃▂▁'
 

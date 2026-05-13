@@ -9,7 +9,13 @@ const cloudManifest = [
     meta:         '/clouds/default-grove.meta.json',
     targetPoints: 120_000,
   },
-  // Real LiDAR scans go here as they're captured.
+  {
+    id:           'model',
+    name:         'Model (test)',
+    file:         '/clouds/model.ply',
+    meta:         null,
+    targetPoints: 240_000,
+  },
 ]
 
 export default cloudManifest

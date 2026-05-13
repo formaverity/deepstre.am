@@ -122,14 +122,30 @@ export function decimate({ positions, colors, count }, targetCount) {
 // (useful for labelling in physical units).
 
 export function normalize({ positions, count }) {
-  let minX = Infinity, minY = Infinity, minZ = Infinity
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
-  for (let i = 0; i < count; i++) {
-    const x = positions[i * 3], y = positions[i * 3 + 1], z = positions[i * 3 + 2]
-    if (x < minX) minX = x;  if (x > maxX) maxX = x
-    if (y < minY) minY = y;  if (y > maxY) maxY = y
-    if (z < minZ) minZ = z;  if (z > maxZ) maxZ = z
+  // Use percentile bounds on a sample rather than absolute min/max.
+  // A single outlier point (e.g. a GPS origin artifact or sensor ghost) at an
+  // extreme coordinate would otherwise make scale = 2 / 1e7, collapsing the
+  // real cluster to sub-pixel size and making it invisible.
+  const SAMPLE = Math.min(count, 2000)
+  const step   = Math.max(1, Math.floor(count / SAMPLE))
+
+  const xs = [], ys = [], zs = []
+  for (let i = 0; i < count; i += step) {
+    xs.push(positions[i * 3])
+    ys.push(positions[i * 3 + 1])
+    zs.push(positions[i * 3 + 2])
   }
+  xs.sort((a, b) => a - b)
+  ys.sort((a, b) => a - b)
+  zs.sort((a, b) => a - b)
+
+  const sn = xs.length
+  const lo = Math.floor(sn * 0.02)
+  const hi = Math.max(Math.floor(sn * 0.98), lo + 1)
+
+  const minX = xs[lo], maxX = xs[hi]
+  const minY = ys[lo], maxY = ys[hi]
+  const minZ = zs[lo], maxZ = zs[hi]
 
   const center = {
     x: (minX + maxX) / 2,

@@ -23,11 +23,20 @@ export const MAPPING = {
 
 // ── Hook (must run inside R3F Canvas via useFrame) ────────────────────────
 
-export function useSculptDriver({ enabled }) {
+export function useSculptDriver({ enabled, uniformsRef }) {
   const frameCount = useRef(0)
 
   useFrame(() => {
-    if (!enabled) return
+    // When not in sculpt mode, decay sculpt shader uniforms back to 0
+    if (!enabled) {
+      if (uniformsRef?.current) {
+        const u = uniformsRef.current.uniforms
+        if (u.uSculptElev)  u.uSculptElev.value  = u.uSculptElev.value  * 0.88
+        if (u.uSculptDist)  u.uSculptDist.value  = u.uSculptDist.value  * 0.88
+        if (u.uSculptSpeed) u.uSculptSpeed.value = u.uSculptSpeed.value * 0.88
+      }
+      return
+    }
 
     const { position: camPos, speed } = useMurmurStore.getState().cameraState
 
@@ -38,27 +47,22 @@ export function useSculptDriver({ enabled }) {
     const azimuth   = Math.atan2(camPos.x, camPos.z)                             // −π..π
     const elevation = Math.asin(THREE.MathUtils.clamp(camPos.y / r, -1, 1))      // −π/2..π/2
 
-    // ── Mappings ────────────────────────────────────────────────────────────
+    // ── Audio mappings ───────────────────────────────────────────────────────
 
-    // Azimuth → buffer position: full orbit = full scrub
     const positionFraction = (azimuth + Math.PI) / (2 * Math.PI)
 
-    // Elevation → playbackRate
     const { elevationToRate } = MAPPING
     const elevNorm    = (elevation + Math.PI / 2) / Math.PI                       // 0..1
     const playbackRate = elevationToRate.low + elevNorm * (elevationToRate.high - elevationToRate.low)
 
-    // Distance → grainSize
     const { near, far, nearDist, farDist } = MAPPING.distanceToGrainSize
     const distT     = THREE.MathUtils.clamp((r - nearDist) / (farDist - nearDist), 0, 1)
     const grainSize = THREE.MathUtils.lerp(near, far, distT)
 
-    // Speed → overlap (stationary = dense, fast motion = sparse)
     const { still, fast, fastThreshold } = MAPPING.speedToOverlap
     const speedT = THREE.MathUtils.clamp(speed / fastThreshold, 0, 1)
     const overlap = THREE.MathUtils.lerp(still, fast, speedT)
 
-    // Detune: subtle pitch colour from rate deviation
     const detune = (playbackRate - 1.0) * MAPPING.detuneCoefficient
 
     const frozen = useMurmurStore.getState().grainFrozen
@@ -66,6 +70,21 @@ export function useSculptDriver({ enabled }) {
       position: frozen ? undefined : positionFraction,
       grainSize, overlap, playbackRate, detune,
     })
+
+    // ── Shader uniforms — spatial visual feedback ────────────────────────────
+    if (uniformsRef?.current) {
+      const u = uniformsRef.current.uniforms
+      // elevation: -1 (looking down) to +1 (looking up)
+      const elevShader = THREE.MathUtils.clamp(elevation / (Math.PI / 2), -1, 1)
+      // distance: 0 (near) to 1 (far), using same near/far as grainSize mapping
+      const distShader = distT
+      // speed: 0 (still) to 1 (fast), using same threshold
+      const speedShader = speedT
+
+      if (u.uSculptElev)  u.uSculptElev.value  = elevShader
+      if (u.uSculptDist)  u.uSculptDist.value  = distShader
+      if (u.uSculptSpeed) u.uSculptSpeed.value = speedShader
+    }
 
     // Throttle store writes to ~10 fps — HUD doesn't need 60 fps updates
     frameCount.current++
@@ -87,7 +106,8 @@ export function useSculptDriver({ enabled }) {
 // ── Component (sibling inside Canvas, like ReactiveDriver) ────────────────
 
 export default function SculptDriver() {
-  const mode = useMurmurStore(s => s.mode)
-  useSculptDriver({ enabled: mode === 'sculpt' })
+  const mode     = useMurmurStore(s => s.mode)
+  const uniforms = useMurmurStore(s => s.uniforms)
+  useSculptDriver({ enabled: mode === 'sculpt', uniformsRef: uniforms.ref })
   return null
 }

@@ -37,22 +37,12 @@ export default function Pond() {
       {error   && <CenteredNote error>{error.message} — run the bake tool first</CenteredNote>}
       {field   && <AsciiField field={field} creaturesRef={creaturesRef} creatureDragRef={creatureDragRef} />}
       {field   && <CameraControls />}
-      {field   && <HintBar />}
       {import.meta.env.DEV && (
         <a href="/tools/bake-aerial/index.html" target="_blank" rel="noreferrer" className="dev-bake-btn">
           bake
         </a>
       )}
       <ProjectFrame />
-    </div>
-  )
-}
-
-function HintBar() {
-  const hasProject = usePondStore(s => s.activeProject !== null)
-  return (
-    <div className="hint-bar">
-      scroll to zoom · drag to pan{hasProject ? ' · ESC to close' : ''}
     </div>
   )
 }

@@ -81,6 +81,13 @@ const WOBBLE_AMP   = 5.0
 const WOBBLE_FREQ  = 0.032
 const WOBBLE_SPEED = 1.2
 
+// Zoom threshold for cluster → glyph switch (crisp, no crossfade)
+const GLYPH_ZOOM_THRESHOLD = 0.8
+// Hex ring of 6 + centre dot — offsets in world-px
+const CLUSTER_DOTS       = [[0,-13],[11,-6],[11,6],[0,13],[-11,6],[-11,-6],[0,0]]
+const CLUSTER_DOT_R      = 2.8
+const CLUSTER_BOUNDING_R = 16   // outer ring (13) + dot radius (2.8) ≈ 16
+
 export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
   const canvasRef      = useRef(null)
   const mouseDownPos   = useRef(null)
@@ -219,6 +226,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const prevAnim = animZoom.v
       animZoom.v = targetZoom
       const zoom = animZoom.v
+      const showGlyph = zoom >= GLYPH_ZOOM_THRESHOLD
 
       if (pivot && prevAnim > 0.001) {
         const f     = zoom / prevAnim
@@ -283,7 +291,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const visCreatures = creatures.filter(c => {
         const hp = c.hoverProgress ?? 0
         const gm = glyphMasks[c.slug]
-        const glyphHW = gm ? gm.totalHalfW : (c.radius ?? 12) * 4
+        const glyphHW = showGlyph ? (gm ? gm.totalHalfW : (c.radius ?? 12) * 4) : CLUSTER_BOUNDING_R + GLYPH_MASK_MARGIN
         const textExtra = hp > 0 ? TEXT_GAP + (textWidthsRef.current[c.slug] ?? 0) * hp : 0
         const r1 = Math.max(c.influenceRadius ?? ((c.radius ?? 12) * 4), glyphHW + textExtra)
         return c.x + r1 > wL && c.x - r1 < wR && c.y + r1 > wT && c.y - r1 < wB
@@ -312,7 +320,10 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           for (const c of visCreatures) {
             const lx = cellCx - c.x, ly = cellCy - c.y
             const gm = glyphMasks[c.slug]
-            if (gm) {
+            if (!showGlyph) {
+              const cr = CLUSTER_BOUNDING_R + GLYPH_MASK_MARGIN
+              if (lx * lx + ly * ly < cr * cr) { inClearance = true; break }
+            } else if (gm) {
               if (Math.abs(lx) <= gm.totalHalfW && Math.abs(ly) <= gm.totalHalfH) {
                 const mx = Math.min(gm.width  - 1, Math.round((lx + gm.totalHalfW) * GLYPH_MASK_SCALE))
                 const my = Math.min(gm.height - 1, Math.round((ly + gm.totalHalfH) * GLYPH_MASK_SCALE))
@@ -393,29 +404,39 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
             glyphY += wy * WOBBLE_AMP
           }
 
-          const svgImg = svgImageMap[c.slug]
-          if (svgImg?.complete && svgImg.naturalWidth > 0) {
-            // Render SVG glyph — size proportional to image aspect, same footprint as ASCII glyph
-            const svgH = creatureH * 1.4
-            const svgW = svgH * (svgImg.naturalWidth / svgImg.naturalHeight)
-            ctx.filter      = 'grayscale(1)'
-            ctx.globalAlpha = 0.50
-            ctx.drawImage(svgImg, glyphX - svgW / 2, glyphY - svgH / 2, svgW, svgH)
-            ctx.globalAlpha = 1
-            ctx.filter      = 'none'
+          if (!showGlyph) {
+            // Dot cluster — hex ring + centre, shown when zoomed out
+            ctx.save()
+            ctx.fillStyle = 'rgba(255,255,255,0.55)'
+            for (const [dx, dy] of CLUSTER_DOTS) {
+              ctx.beginPath()
+              ctx.arc(glyphX + dx, glyphY + dy, CLUSTER_DOT_R, 0, Math.PI * 2)
+              ctx.fill()
+            }
+            ctx.restore()
           } else {
-            const glyph = c.project?.glyph?.ascii
-            if (!glyph) continue
-            ctx.fillText(glyph, glyphX, glyphY)
+            // Custom glyph (SVG or ASCII) — shown when zoomed in
+            const svgImg = svgImageMap[c.slug]
+            if (svgImg?.complete && svgImg.naturalWidth > 0) {
+              const svgH = creatureH * 1.4
+              const svgW = svgH * (svgImg.naturalWidth / svgImg.naturalHeight)
+              ctx.filter      = 'grayscale(1)'
+              ctx.globalAlpha = 0.50
+              ctx.drawImage(svgImg, glyphX - svgW / 2, glyphY - svgH / 2, svgW, svgH)
+              ctx.globalAlpha = 1
+              ctx.filter      = 'none'
+            } else {
+              const glyph = c.project?.glyph?.ascii
+              if (glyph) ctx.fillText(glyph, glyphX, glyphY)
+            }
           }
 
           // Project name unfurls to the right of the glyph on hover
           const hp = c.hoverProgress ?? 0
           if (hp > 0.01) {
             const gm = glyphMasks[c.slug]
-            const glyphHW = gm
-              ? gm.totalHalfW
-              : creatureH * CHAR_ASPECT * 0.5 + GLYPH_MASK_MARGIN
+            const baseHW  = gm ? gm.totalHalfW : creatureH * CHAR_ASPECT * 0.5 + GLYPH_MASK_MARGIN
+            const glyphHW = showGlyph ? baseHW : CLUSTER_BOUNDING_R + GLYPH_MASK_MARGIN
             const fullW = textWidthsRef.current[c.slug] ?? 0
             const animW = fullW * hp
             const textX = glyphX + glyphHW + TEXT_GAP

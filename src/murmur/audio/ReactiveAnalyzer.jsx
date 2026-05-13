@@ -11,7 +11,7 @@ export function useReactiveDriver({ enabled, uniformsRef }) {
     if (!enabled || !uniformsRef?.current) return
     const u = uniformsRef.current.uniforms
 
-    if (audioEngine.isPlaying) {
+    if (audioEngine.isAnyAudioActive) {
       const bands = audioEngine.getFFT()
       u.uBassEnergy.value   = bands.bass
       u.uMidEnergy.value    = (bands.lowMid + bands.highMid) / 2
@@ -29,6 +29,6 @@ export function useReactiveDriver({ enabled, uniformsRef }) {
 export default function ReactiveDriver() {
   const mode    = useMurmurStore(s => s.mode)
   const uniforms = useMurmurStore(s => s.uniforms)
-  useReactiveDriver({ enabled: mode === 'reactive', uniformsRef: uniforms.ref })
+  useReactiveDriver({ enabled: mode === 'reactive' || mode === 'sculpt', uniformsRef: uniforms.ref })
   return null
 }

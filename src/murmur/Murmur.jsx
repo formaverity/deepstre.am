@@ -162,15 +162,15 @@ export default function Murmur() {
         </div>
       )}
 
-      {/* Full-bleed 3-D scene */}
-      {cloud && !cloudLoading && <PointCloudScene />}
+      {/* Full-bleed 3-D scene — keep mounted once initial cloud is ready; cloud swaps are handled inside PointCloud via useMemo */}
+      {cloud && <PointCloudScene />}
 
-      {/* Bottom-center: transport + upload */}
+      {/* Bottom-center: transport + upload — stacked in a flex column so they never overlap */}
       {cloud && (
-        <>
+        <div className="murmur-bottom-center">
           <Transport />
           <AudioUpload />
-        </>
+        </div>
       )}
 
       {/* Bottom-right: sculpt HUD */}

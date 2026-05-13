@@ -9,7 +9,7 @@ export default function CameraControls() {
 
   return (
     <div className="camera-controls">
-      <div className="zone-label">{zone} · {targetZoom.toFixed(2)}×</div>
+      <div className="zone-label">{zone}</div>
       <div className="zoom-buttons">
         <button className="zoom-btn" onClick={() => zoomBy(1.25)} aria-label="zoom in">+</button>
         <button className="zoom-btn" onClick={() => zoomBy(0.8)}  aria-label="zoom out">−</button>

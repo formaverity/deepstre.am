@@ -3,6 +3,9 @@ import PointCloud from './PointCloud.jsx'
 import CameraRig from './CameraRig.jsx'
 import ReactiveDriver from '@/murmur/audio/ReactiveAnalyzer.jsx'
 import SculptDriver from '@/murmur/audio/GranularSculptor.jsx'
+import SculptParticles from './SculptParticles.jsx'
+import AudioAtmos from './AudioAtmos.jsx'
+import OrbitLights from './OrbitLights.jsx'
 
 const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width:639px)').matches
 
@@ -17,7 +20,10 @@ export default function PointCloudScene() {
         <color attach="background" args={['#070b08']} />
         <fog attach="fog" args={['#070b08', 4, 14]} />
         <ambientLight intensity={0.4} />
+        <AudioAtmos />
+        <OrbitLights />
         <PointCloud />
+        <SculptParticles />
         <CameraRig />
         <ReactiveDriver />
         <SculptDriver />
