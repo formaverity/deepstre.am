@@ -7,7 +7,6 @@ import { pickGlyph } from '@/pond/glyphs.js'
 import { doubletDisplacement } from '@/pond/displacement.js'
 import projects from '@/projects/_manifest.js'
 import { colorForStatus } from '@/pond/statusColors.js'
-import { loadColoredSvg } from '@/pond/glyphImages.js'
 
 const CHAR_ASPECT = 0.6
 const CELL_H      = 11
@@ -27,28 +26,18 @@ const ALPHA_CACHE = Array.from({ length: REGION_BASE_ALPHA.length }, (_, reg) =>
 )
 
 // Glyph mask — geometry-responsive clearance built from the actual rendered pixels.
-// Each glyph is rasterised onto a small offscreen canvas (SCALE× oversample),
-// then the alpha mask is morphologically dilated by MARGIN world-px to create a halo.
-// Cells whose centre falls on a masked pixel are suppressed in the main render.
-const GLYPH_MASK_SCALE  = 2   // oversample factor
-const GLYPH_MASK_MARGIN = 4   // world-px halo around the glyph shape
+const GLYPH_MASK_SCALE  = 2
+const GLYPH_MASK_MARGIN = 4
 
-// Hover unfurl constants
-const NAME_FONT_SIZE  = CELL_H * 2           // 22px — project name label
-const TEXT_GAP        = Math.round(CELL_W * 1.2)  // gap between glyph right edge and text start
-const TEXT_HALF_H     = NAME_FONT_SIZE * 0.75     // vertical half-extent of the name text
-const HOVER_IN_SPEED  = 6   // progress units/sec — full unfurl ~167ms
-const HOVER_OUT_SPEED = 4   // progress units/sec — full furl ~250ms
+const HOVER_IN_SPEED  = 6
+const HOVER_OUT_SPEED = 4
 
-// Rasterises `canvas` (with the glyph drawn at offset MARGIN*SCALE, MARGIN*SCALE,
-// size worldW*SCALE × worldH*SCALE) into a dilated binary mask.
 function buildGlyphMask(canvas, worldW, worldH) {
   const W = canvas.width, H = canvas.height
   const raw = canvas.getContext('2d').getImageData(0, 0, W, H).data
   const src = new Uint8Array(W * H)
   for (let i = 0; i < W * H; i++) src[i] = raw[i * 4 + 3] > 24 ? 1 : 0
 
-  // Forward box-dilation: for every set source pixel, fill a dilR-radius neighbourhood.
   const dilR = GLYPH_MASK_MARGIN * GLYPH_MASK_SCALE
   const dst  = new Uint8Array(W * H)
   for (let y = 0; y < H; y++) {
@@ -66,88 +55,90 @@ function buildGlyphMask(canvas, worldW, worldH) {
     data:       dst,
     width:      W,
     height:     H,
-    // Half-extents of the world region the mask covers (glyph + margin on each side)
     totalHalfW: worldW / 2 + GLYPH_MASK_MARGIN,
     totalHalfH: worldH / 2 + GLYPH_MASK_MARGIN,
   }
 }
 
-// Wobble constants — ambient noise displacement applied to creature glyph positions
+// Wobble constants — ambient noise displacement applied to creature positions
 const WOBBLE_AMP   = 3.0
 const WOBBLE_FREQ  = 0.032
 const WOBBLE_SPEED = 1.2
 
-// Glyphs pepper in across this zoom range — each project has a distinct threshold
-const GLYPH_PEPPER_MIN   = 0.85
-const GLYPH_PEPPER_MAX   = 0.95
-const CLUSTER_BOUNDING_R = 24   // encloses the █ blob cluster
-
-// Blob zoom thresholds — match AERIAL_MAX / SURFACE_MAX in usePondStore
-const BLOB_ZOOM_MIN = 1.6   // single char fades out, blob fades in
-const SVG_ZOOM_MIN  = 3.2   // SVG detail overlay fades in above this
+// Zoom thresholds for the three blob states:
+//   outlined █  →  filled █  →  revealed letters
+const OUTLINE_FILL_START = 0.5   // outline starts filling in
+const OUTLINE_FILL_END   = 1.3   // fully filled by this zoom
+const BLOB_ZOOM_MIN      = 1.6   // filled █ start revealing as letters
+const TEXT_ZOOM_MAX      = 3.2   // reveal complete at this zoom
 
 function smoothstep(x) {
   const t = Math.max(0, Math.min(1, x))
   return t * t * (3 - 2 * t)
 }
 
-// Deterministic 0…2π phase from a string seed — per-cell and per-creature offsets
+// Deterministic 0…2π phase from a string seed
 function phaseFromSeed(str) {
   let h = 5381
   for (let i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0
   return (h % 1000) / 1000 * Math.PI * 2
 }
 
-// Procedural amoeba-shaped scatter of ASCII dots for the zoomed-out view.
-// Uses the project's own ascii glyph at the centre plus organic dot perimeter.
-// Much sparser than the old █ grid — gives a softer, more ASCII-art feel.
-function buildClusterBlob(slug, ascii) {
-  const basePhase = phaseFromSeed(slug + '_cl')
-  const cells     = []
+// Build a blob from the project name as rows of █ characters.
+// 1-word names: single horizontal row centered on the creature.
+// Multi-word names: one row per word, each odd row offset right for stagger.
+function buildNameBlob(slug, name) {
+  const words      = name.trim().split(/\s+/)
+  const cells      = []
+  const rowSpacing = CELL_H * 1.5
+  const staggerX   = CELL_W * 1.5
 
-  // Organic perimeter — 12-16 points on a warped ellipse
-  const N = 12 + Math.floor((phaseFromSeed(slug + '_n') / (Math.PI * 2)) * 4)
-  for (let i = 0; i < N; i++) {
-    const angle = (i / N) * Math.PI * 2 + basePhase * 0.18
-    const warp  = 0.44 * Math.sin(angle * 3 + basePhase)
-                + 0.28 * Math.cos(angle * 5 + basePhase * 1.7)
-                + 0.16 * Math.sin(angle * 7 + basePhase * 0.85)
-    const r   = 1.0 + warp
-    const hx  = Math.round(r * Math.cos(angle) * CELL_W * 3.0)
-    const hy  = Math.round(r * Math.sin(angle) * CELL_H * 1.75)
-    // Outer ring → middle-dot, inner dips → bullet
-    const ch = warp < -0.08 ? '·' : '∙'
-    cells.push({ char: ch, homeX: hx, homeY: hy, phase: phaseFromSeed(slug + i + 'p') })
+  for (let wi = 0; wi < words.length; wi++) {
+    const word    = words[wi]
+    const rowY    = (wi - (words.length - 1) / 2) * rowSpacing
+    const offsetX = wi % 2 === 1 ? staggerX : 0
+
+    for (let ci = 0; ci < word.length; ci++) {
+      cells.push({
+        char:       '█',
+        revealChar: word[ci],
+        homeX:   (ci - (word.length - 1) / 2) * CELL_W * 0.92 + offsetX,
+        homeY:   rowY,
+        phase:   phaseFromSeed(slug + '_nb_' + wi + '_' + ci),
+        charIdx: ci,
+        wordLen: word.length,
+      })
+    }
   }
-
-  // Sparse inner scatter — 3-5 points
-  const innerN = 3 + Math.floor((phaseFromSeed(slug + '_in') / (Math.PI * 2)) * 2)
-  for (let i = 0; i < innerN; i++) {
-    const a  = phaseFromSeed(slug + '_ia' + i)
-    const r  = 0.28 + 0.32 * (phaseFromSeed(slug + '_ir' + i) / (Math.PI * 2))
-    const hx = Math.round(r * Math.cos(a) * CELL_W * 2.4)
-    const hy = Math.round(r * Math.sin(a) * CELL_H * 1.4)
-    cells.push({ char: '·', homeX: hx, homeY: hy, phase: phaseFromSeed(slug + i + 'i') })
-  }
-
-  // Centre: project's own ascii glyph (slightly larger) or fallback ring
-  cells.push({
-    char:  ascii ?? '◦',
-    homeX: 0,
-    homeY: 0,
-    phase: phaseFromSeed(slug + '_c'),
-    size:  ascii ? 1.5 : 1.0,
-  })
 
   return cells
+}
+
+// Module-level: precompute name blobs and their world extents (static data)
+const nameBlobs    = {}
+const nameBlobDims = {}
+for (const p of projects) {
+  const cells = buildNameBlob(p.slug, p.name)
+  nameBlobs[p.slug] = cells
+  if (cells.length) {
+    let maxX = 0, maxY = 0
+    for (const cell of cells) {
+      maxX = Math.max(maxX, Math.abs(cell.homeX))
+      maxY = Math.max(maxY, Math.abs(cell.homeY))
+    }
+    nameBlobDims[p.slug] = {
+      worldW: (maxX + CELL_W / 2) * 2,
+      worldH: (maxY + CELL_H / 2) * 2,
+      halfW:  maxX + CELL_W / 2,
+      halfH:  maxY + CELL_H / 2,
+    }
+  }
 }
 
 export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
   const canvasRef      = useRef(null)
   const mouseDownPos   = useRef(null)
   const hoveredSlugRef = useRef(null)
-  const textWidthsRef  = useRef({})
-  const glyphMasksRef  = useRef({})
 
   useEffect(() => {
     if (!field) return
@@ -156,138 +147,27 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
     const container = canvas.parentElement
     const ctx       = canvas.getContext('2d', { alpha: true })
 
-    // Pre-load color-normalized SVG glyphs; module-level cache avoids re-fetch on remount
-    const svgImageMap = {}
-    for (const p of projects) {
-      if (p.glyph?.svgUrl) {
-        svgImageMap[p.slug] = loadColoredSvg(p.glyph.svgUrl, p.status)
-      }
-    }
-
-    // Pre-measure project name text widths for unfurl animation
-    const tmpCtx = document.createElement('canvas').getContext('2d')
-    tmpCtx.font = `${NAME_FONT_SIZE}px ui-monospace, 'Courier New', Courier, monospace`
-    for (const p of projects) {
-      textWidthsRef.current[p.slug] = tmpCtx.measureText(p.name).width
-    }
-
-    // Pre-parse blob cell arrays into flat lists with world-space offsets and phase seeds
-    const blobCells = {}
-    for (const p of projects) {
-      if (!p.glyph?.blob) continue
-      const rows  = p.glyph.blob
-      const nRows = rows.length
-      const nCols = Math.max(...rows.map(r => [...r].length))
-      const cells = []
-      for (let r = 0; r < nRows; r++) {
-        const chars = [...rows[r]]
-        for (let col = 0; col < chars.length; col++) {
-          if (chars[col] !== ' ') {
-            cells.push({
-              char:  chars[col],
-              homeX: (col - (nCols - 1) / 2) * CELL_W,
-              homeY: (r   - (nRows - 1) / 2) * CELL_H,
-              phase: phaseFromSeed(p.slug + cells.length),
-            })
-          }
-        }
-      }
-      blobCells[p.slug] = cells
-    }
-
-    // Zoomed-out amoeba clusters — one blob shape per project
-    const clusterBlobs = {}
-    for (const p of projects) clusterBlobs[p.slug] = buildClusterBlob(p.slug, p.glyph?.ascii)
-
-    // Fast lookup: Set of "col,row" offsets for exact-cell clearance matching
-    const clusterBlobSets = {}
-    for (const p of projects) {
-      const s = new Set()
-      for (const bc of clusterBlobs[p.slug]) {
-        s.add(`${Math.round(bc.homeX / CELL_W)},${Math.round(bc.homeY / CELL_H)}`)
-      }
-      clusterBlobSets[p.slug] = s
-    }
-
-    // Each project reveals its glyph at a distinct zoom within GLYPH_PEPPER_MIN..MAX
-    const glyphThresholds = {}
-    for (const p of projects) {
-      const t01 = phaseFromSeed(p.slug + '_gt') / (Math.PI * 2)
-      glyphThresholds[p.slug] = GLYPH_PEPPER_MIN + t01 * (GLYPH_PEPPER_MAX - GLYPH_PEPPER_MIN)
-    }
-
-    // ── Glyph masks ────────────────────────────────────────────────────
-    // Per-creature pixel masks built from the actual rendered glyph shape.
-    // Blob and ASCII masks are built synchronously; SVG masks are built on image load.
+    // Build pixel masks from name blob cells
     const glyphMasks = {}
-    const creatureRenderH = CELL_H * 3
     const M = GLYPH_MASK_MARGIN, S = GLYPH_MASK_SCALE
 
-    // Mirror mask into both the local map and the ref so event handlers can read it
-    const setMask = (slug, mask) => {
-      glyphMasks[slug] = mask
-      glyphMasksRef.current[slug] = mask
-    }
-
-    // Blob glyphs — rasterise all cells onto an offscreen canvas
     for (const p of projects) {
-      if (!p.glyph?.blob) continue
-      const cells = blobCells[p.slug]
-      if (!cells?.length) continue
-      const nRows = p.glyph.blob.length
-      const nCols = Math.max(...p.glyph.blob.map(r => [...r].length))
-      const blobW = nCols * CELL_W
-      const blobH = nRows * CELL_H
+      const cells = nameBlobs[p.slug]
+      const dim   = nameBlobDims[p.slug]
+      if (!cells?.length || !dim) continue
+      const { worldW, worldH } = dim
       const oc = document.createElement('canvas')
-      oc.width  = Math.ceil((blobW + M * 2) * S)
-      oc.height = Math.ceil((blobH + M * 2) * S)
+      oc.width  = Math.ceil((worldW + M * 2) * S)
+      oc.height = Math.ceil((worldH + M * 2) * S)
       const octx = oc.getContext('2d')
       octx.font         = `${CELL_H * S}px ui-monospace, 'Courier New', Courier, monospace`
       octx.textBaseline = 'middle'
       octx.textAlign    = 'center'
       octx.fillStyle    = 'white'
       for (const cell of cells) {
-        octx.fillText(cell.char, (blobW / 2 + cell.homeX + M) * S, (blobH / 2 + cell.homeY + M) * S)
+        octx.fillText('█', (cell.homeX + worldW / 2 + M) * S, (cell.homeY + worldH / 2 + M) * S)
       }
-      setMask(p.slug, buildGlyphMask(oc, blobW, blobH))
-    }
-
-    // ASCII glyphs — rasterise the character (skip blob and SVG creatures)
-    for (const p of projects) {
-      if (p.glyph?.blob || p.glyph?.svgUrl) continue
-      const ascii = p.glyph?.ascii
-      if (!ascii) continue
-      const charW = creatureRenderH * CHAR_ASPECT
-      const charH = creatureRenderH
-      const oc = document.createElement('canvas')
-      oc.width  = Math.ceil((charW + M * 2) * S)
-      oc.height = Math.ceil((charH + M * 2) * S)
-      const octx = oc.getContext('2d')
-      octx.font         = `${charH * S}px ui-monospace, 'Courier New', Courier, monospace`
-      octx.textBaseline = 'middle'
-      octx.textAlign    = 'center'
-      octx.fillStyle    = 'white'
-      octx.fillText(ascii, oc.width / 2, oc.height / 2)
-      setMask(p.slug, buildGlyphMask(oc, charW, charH))
-    }
-
-    // SVG glyphs — build mask on image load (skip blob creatures)
-    for (const p of projects) {
-      if (p.glyph?.blob || !p.glyph?.svgUrl) continue
-      const img = svgImageMap[p.slug]
-      if (!img) continue
-      const buildSvgMask = () => {
-        const svgH = creatureRenderH * 1.4
-        const svgW = svgH * (img.naturalWidth / img.naturalHeight)
-        const oc = document.createElement('canvas')
-        oc.width  = Math.ceil((svgW + M * 2) * S)
-        oc.height = Math.ceil((svgH + M * 2) * S)
-        const octx = oc.getContext('2d')
-        octx.drawImage(img, M * S, M * S, svgW * S, svgH * S)
-        setMask(p.slug, buildGlyphMask(oc, svgW, svgH))
-      }
-      if (img.complete && img.naturalWidth > 0) buildSvgMask()
-      else img.addEventListener('load', buildSvgMask)
+      glyphMasks[p.slug] = buildGlyphMask(oc, worldW, worldH)
     }
 
     const cursor = {
@@ -297,8 +177,6 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       _velIdx: 0, _prevX: null, _prevY: null,
     }
 
-    // Smoothed wind drift — lerps toward cursor-biased target so the
-    // water never snaps when the cursor moves.
     const windDrift = { x: 0.18, y: 0.13 }
 
     let rafId
@@ -307,8 +185,6 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
     const animPan  = { x: usePondStore.getState().camera.x, y: usePondStore.getState().camera.y }
     let initialized = false
     let prevTs = null
-
-    // ── Resize observer ────────────────────────────────────────────────
 
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect
@@ -323,8 +199,6 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
         initialized = true
         const fieldW = field.cols * CELL_W
         const fieldH = field.rows * CELL_H
-        // Fit the pond within 90% of the viewport on first load.
-        // Caps at 1 so we never start zoomed in past 100%.
         const fitZoom = Math.min(1, (width * 0.9) / fieldW, (height * 0.9) / fieldH)
         animZoom.v = fitZoom
         usePondStore.setState(s => ({
@@ -340,8 +214,6 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
     })
     ro.observe(container)
 
-    // ── RAF loop ───────────────────────────────────────────────────────
-
     function frame(ts) {
       rafId = requestAnimationFrame(frame)
 
@@ -352,11 +224,13 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const { targetZoom, pivot } = store.camera
       const t  = (ts - t0) / 1000
 
-      // ── Instant zoom + incremental pivot-pan ──────────────────────────
       const prevAnim = animZoom.v
       animZoom.v = targetZoom
       const zoom = animZoom.v
-      const blobReveal = smoothstep((zoom - BLOB_ZOOM_MIN) / (SVG_ZOOM_MIN - BLOB_ZOOM_MIN))
+
+      // Blob state factors — three stages as zoom increases
+      const fillFactor   = smoothstep((zoom - OUTLINE_FILL_START) / (OUTLINE_FILL_END   - OUTLINE_FILL_START))
+      const zoomReveal   = smoothstep((zoom - BLOB_ZOOM_MIN)      / (TEXT_ZOOM_MAX      - BLOB_ZOOM_MIN))
 
       if (pivot && prevAnim > 0.001) {
         const f     = zoom / prevAnim
@@ -375,7 +249,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           zoom,
           x:     animPan.x,
           y:     animPan.y,
-          pivot: null,  // cleared each frame — pivot is consumed in one step
+          pivot: null,
         },
       }))
 
@@ -386,7 +260,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const cssW = canvas.width  / dpr
       const cssH = canvas.height / dpr
 
-      // ── Animate hoverProgress per creature ────────────────────────────
+      // Animate hoverProgress per creature
       const currentHoveredSlug = hoveredSlugRef.current
       const creatures = creaturesRef ? creaturesRef.current : []
       for (const c of creatures) {
@@ -417,17 +291,16 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const row0 = Math.max(0,              Math.floor(wT / CELL_H) - 1)
       const row1 = Math.min(field.rows - 1, Math.ceil( wB / CELL_H) + 1)
 
-      // Pre-filter creatures — extend bounding box to include unfurling text
+      // Pre-filter creatures in viewport
       const visCreatures = creatures.filter(c => {
-        const hp = c.hoverProgress ?? 0
-        const gm = glyphMasks[c.slug]
-        const showGlyphC = zoom >= (glyphThresholds[c.slug] ?? GLYPH_PEPPER_MIN)
-        const glyphHW = showGlyphC ? (gm ? gm.totalHalfW : (c.radius ?? 12) * 4) : CLUSTER_BOUNDING_R + GLYPH_MASK_MARGIN
-        const textExtra = hp > 0 ? TEXT_GAP + (textWidthsRef.current[c.slug] ?? 0) * hp : 0
-        const r1 = Math.max(c.influenceRadius ?? ((c.radius ?? 12) * 4), glyphHW + textExtra)
-        return c.x + r1 > wL && c.x - r1 < wR && c.y + r1 > wT && c.y - r1 < wB
+        const dim = nameBlobDims[c.slug]
+        const r = dim
+          ? Math.max(c.influenceRadius ?? 48, dim.halfW + GLYPH_MASK_MARGIN)
+          : (c.influenceRadius ?? 48)
+        return c.x + r > wL && c.x - r < wR && c.y + r > wT && c.y - r < wB
       })
-      // Cursor virtual displacer — fades in 100 ms when inside, out 300 ms when outside
+
+      // Cursor virtual displacer
       const mouse = store.mouse
       if (mouse.inside) {
         const wx = (mouse.x - animPan.x) / zoom
@@ -452,12 +325,10 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
         cursor._prevX = null
         cursor._prevY = null
       }
-      // Cursor is no longer a doublet displacer — it drives wind direction instead
       const displacers = visCreatures
       const hasFlow    = displacers.length > 0
 
-      // Wind direction: smoothly bias shimmer drift toward cursor position.
-      // Lerp rate ~0.45/s keeps the water calm — takes ~2s to fully respond.
+      // Wind direction: smoothly bias shimmer drift toward cursor position
       const fieldW    = field.cols * CELL_W
       const fieldH    = field.rows * CELL_H
       const hasCursor = cursor.influence > 0.01
@@ -473,7 +344,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
 
       const shimmerIntensity = 0.12
 
-      // ── Main glyph render ─────────────────────────────────────────────
+      // ── Main field render ─────────────────────────────────────────────
       let lastFillStyle = ''
       for (let cy = row0; cy <= row1; cy++) {
         const baseWy = cy * CELL_H
@@ -483,43 +354,29 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           if (reg === 0) continue
 
           const baseWx = cx * CELL_W
-
-          // Glyph + text clearance — pixel-mask test plus animated text rectangle.
-          // AABB pre-reject keeps the common (far-away) case cheap.
           const cellCx = baseWx + CELL_W * 0.5
           const cellCy = baseWy + CELL_H * 0.5
+
+          // Clearance — suppress field cells that fall inside a creature blob
           let inClearance = false
           for (const c of visCreatures) {
             const lx = cellCx - c.x, ly = cellCy - c.y
             const gm = glyphMasks[c.slug]
-            if (zoom < (glyphThresholds[c.slug] ?? GLYPH_PEPPER_MIN)) {
-              const col = Math.round(lx / CELL_W)
-              const row = Math.round(ly / CELL_H)
-              if (clusterBlobSets[c.slug]?.has(`${col},${row}`)) { inClearance = true; break }
-            } else if (gm) {
+            if (gm) {
               if (Math.abs(lx) <= gm.totalHalfW && Math.abs(ly) <= gm.totalHalfH) {
                 const mx = Math.min(gm.width  - 1, Math.round((lx + gm.totalHalfW) * GLYPH_MASK_SCALE))
                 const my = Math.min(gm.height - 1, Math.round((ly + gm.totalHalfH) * GLYPH_MASK_SCALE))
                 if (gm.data[my * gm.width + mx]) { inClearance = true; break }
               }
             } else {
-              // Mask not ready yet — tight circle fallback
-              if (lx * lx + ly * ly < 400) { inClearance = true; break }  // 20px radius
-            }
-            // Text clearance — clear the area the unfurling name occupies
-            const hp = c.hoverProgress ?? 0
-            if (hp > 0.01) {
-              const glyphHW = gm ? gm.totalHalfW : 20
-              const animW   = (textWidthsRef.current[c.slug] ?? 0) * hp
-              if (lx > glyphHW && lx < glyphHW + TEXT_GAP + animW + GLYPH_MASK_MARGIN
-                  && Math.abs(ly) < TEXT_HALF_H) {
+              const dim = nameBlobDims[c.slug]
+              if (dim && Math.abs(lx) < dim.halfW + GLYPH_MASK_MARGIN && Math.abs(ly) < dim.halfH + GLYPH_MASK_MARGIN) {
                 inClearance = true; break
               }
             }
           }
           if (inClearance) continue
 
-          // Creature doublet displacement (clearance already excludes the inner mask zone)
           let drawX = baseWx, drawY = baseWy
           if (hasFlow) {
             const { dx, dy } = doubletDisplacement(baseWx, baseWy, displacers, t, CELL_H)
@@ -543,18 +400,23 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
         }
       }
 
-      // ── Creature glyphs + hover name unfurl ───────────────────────────
+      // ── Creature name blobs ───────────────────────────────────────────
       if (creatures.length > 0) {
-        const creatureH = CELL_H * 3
         ctx.save()
-        ctx.font         = `${creatureH}px ui-monospace, 'Courier New', Courier, monospace`
+        ctx.font         = `${CELL_H}px ui-monospace, 'Courier New', Courier, monospace`
         ctx.textBaseline = 'middle'
         ctx.textAlign    = 'center'
-        for (const c of creatures) {
-          if (c.x < wL - creatureH * 2 || c.x > wR + creatureH * 2) continue
-          if (c.y < wT - creatureH * 2 || c.y > wB + creatureH * 2) continue
+        // Outline stroke width: ~1px in screen space
+        ctx.lineWidth    = 1.0 / zoom
 
-          const hp = c.hoverProgress ?? 0
+        for (const c of creatures) {
+          const dim = nameBlobDims[c.slug]
+          if (!dim) continue
+          const r = Math.max(dim.halfW, dim.halfH) + GLYPH_MASK_MARGIN
+          if (c.x + r < wL || c.x - r > wR || c.y + r < wT || c.y - r > wB) continue
+
+          const hp           = c.hoverProgress ?? 0
+          const revealFactor = Math.max(zoomReveal, hp)
 
           const wobX = (fbm(c.x * WOBBLE_FREQ + t * WOBBLE_SPEED + 1.5,
                             c.y * WOBBLE_FREQ + t * WOBBLE_SPEED * 0.7, 2) - 0.5) * 2
@@ -563,145 +425,74 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           const glyphX = c.x + wobX * WOBBLE_AMP
           const glyphY = c.y + wobY * WOBBLE_AMP
 
-          const showGlyphC = zoom >= (glyphThresholds[c.slug] ?? GLYPH_PEPPER_MIN)
-          if (!showGlyphC) {
-            // Amoeba blob — cluster of █ cells, organically jittered
-            const clusterCells = clusterBlobs[c.slug]
-            if (clusterCells?.length) {
-              ctx.save()
-              ctx.textBaseline = 'middle'
-              ctx.textAlign    = 'center'
-              ctx.fillStyle    = colorForStatus(c.project.status)
-              let lastCellFont = ''
-              for (const bc of clusterCells) {
-                const fSize = bc.size ? CELL_H * bc.size : CELL_H
-                const fStr  = `${fSize}px ui-monospace, 'Courier New', Courier, monospace`
-                if (fStr !== lastCellFont) { ctx.font = fStr; lastCellFont = fStr }
-                ctx.globalAlpha = 0.42 + 0.22 * Math.sin(t * 0.28 + bc.phase * 0.7)
-                ctx.fillText(bc.char, c.x + bc.homeX, c.y + bc.homeY)
-              }
-              ctx.globalAlpha = 1
-              ctx.restore()
-            }
-          } else {
-            const cells      = blobCells[c.slug]
-            const statusColor = colorForStatus(c.project.status)
+          const cells = nameBlobs[c.slug]
+          if (!cells?.length) continue
 
-            if (cells?.length > 0) {
-              // ── Single-char layer — fades out as blob fades in ──────────
-              const charAlpha = 0.55 * (1 - blobReveal)
-              if (charAlpha > 0.01) {
-                const glyph = c.project?.glyph?.ascii
-                if (glyph) {
-                  ctx.fillStyle   = statusColor
-                  ctx.globalAlpha = charAlpha
-                  ctx.fillText(glyph, glyphX, glyphY)
-                  ctx.globalAlpha = 1
-                }
-              }
-
-              // ── Blob layer — fades in from BLOB_ZOOM_MIN ────────────────
-              if (blobReveal > 0.005) {
-                if (c._blobPhase === undefined) {
-                  c._blobPhase = phaseFromSeed(c.slug + 'blob')
-                  c._pulse = { cell: -1, startT: -999, cooldown: 0.5 + Math.random() * 2 }
-                }
-
-                // Breathing — shared opacity oscillation across all cells
-                const breathFreq = hp > 0.05 ? 0.30 : 0.15
-                const breathe    = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * breathFreq + c._blobPhase)
-                const baseAlpha  = (0.45 + 0.20 * breathe) * blobReveal
-
-                // Pulse — one cell brightens periodically
-                c._pulse.cooldown -= dt
-                if (c._pulse.cooldown <= 0) {
-                  c._pulse.cell     = Math.floor(Math.random() * cells.length)
-                  c._pulse.startT   = t
-                  c._pulse.cooldown = (hp > 0.05 ? 0.75 : 3.0) * (0.7 + Math.random() * 0.6)
-                }
-
-                const jitterScale = hp > 0.05 ? 1.5 : 1.0
-
-                ctx.save()
-                ctx.font         = `${CELL_H}px ui-monospace, 'Courier New', Courier, monospace`
-                ctx.textBaseline = 'middle'
-                ctx.textAlign    = 'center'
-                ctx.fillStyle    = statusColor
-
-                for (let ci = 0; ci < cells.length; ci++) {
-                  const cell     = cells[ci]
-                  const jx       = Math.sin(t * 1.2 + cell.phase) * 0.6 * CELL_W * jitterScale
-                  const jy       = Math.cos(t * 0.9 + cell.phase * 1.3) * 0.4 * CELL_H * jitterScale
-                  const pulseAge = t - c._pulse.startT
-                  let cellAlpha  = baseAlpha
-                  if (ci === c._pulse.cell && pulseAge >= 0 && pulseAge < 0.6) {
-                    const ramp  = Math.min(1, pulseAge / 0.2)
-                    const decay = pulseAge >= 0.2 ? Math.max(0, 1 - (pulseAge - 0.2) / 0.4) : 1
-                    cellAlpha   = Math.min(1, cellAlpha + 0.4 * Math.min(ramp, decay))
-                  }
-                  ctx.globalAlpha = Math.min(1, Math.max(0, cellAlpha))
-                  ctx.fillText(cell.char, glyphX + cell.homeX + jx, glyphY + cell.homeY + jy)
-                }
-                ctx.globalAlpha = 1
-                ctx.restore()
-
-                // ── SVG detail overlay — fades in above SVG_ZOOM_MIN ────
-                if (zoom >= SVG_ZOOM_MIN) {
-                  const svgImg = svgImageMap[c.slug]
-                  if (svgImg?.complete && svgImg.naturalWidth > 0) {
-                    const svgFactor = smoothstep((zoom - SVG_ZOOM_MIN) / 1.6)
-                    if (svgFactor > 0.01) {
-                      const svgH = CELL_H * 2
-                      const svgW = svgH * (svgImg.naturalWidth / svgImg.naturalHeight)
-                      ctx.globalAlpha = 0.35 * svgFactor
-                      ctx.drawImage(svgImg, glyphX - svgW / 2, glyphY - svgH / 2, svgW, svgH)
-                      ctx.globalAlpha = 1
-                    }
-                  }
-                }
-              }
-            } else {
-              // Non-blob fallback — original SVG or ASCII
-              const svgImg = svgImageMap[c.slug]
-              if (svgImg?.complete && svgImg.naturalWidth > 0) {
-                const svgH = creatureH * 1.4
-                const svgW = svgH * (svgImg.naturalWidth / svgImg.naturalHeight)
-                ctx.globalAlpha = 0.70
-                ctx.drawImage(svgImg, glyphX - svgW / 2, glyphY - svgH / 2, svgW, svgH)
-                ctx.globalAlpha = 1
-              } else {
-                const glyph = c.project?.glyph?.ascii
-                if (glyph) {
-                  ctx.fillStyle   = statusColor
-                  ctx.globalAlpha = 0.55
-                  ctx.fillText(glyph, glyphX, glyphY)
-                  ctx.globalAlpha = 1
-                }
-              }
-            }
+          if (c._blobPhase === undefined) {
+            c._blobPhase = phaseFromSeed(c.slug + 'blob')
+            c._pulse = { cell: -1, startT: -999, cooldown: 0.5 + Math.random() * 2 }
           }
 
-          // Project name unfurls to the right of the glyph on hover
-          if (hp > 0.01) {
-            const gm = glyphMasks[c.slug]
-            const baseHW  = gm ? gm.totalHalfW : creatureH * CHAR_ASPECT * 0.5 + GLYPH_MASK_MARGIN
-            const glyphHW = showGlyphC ? baseHW : CLUSTER_BOUNDING_R + GLYPH_MASK_MARGIN
-            const fullW = textWidthsRef.current[c.slug] ?? 0
-            const animW = fullW * hp
-            const textX = glyphX + glyphHW + TEXT_GAP
+          // Breathing — shared opacity oscillation
+          const breathFreq = hp > 0.05 ? 0.30 : 0.15
+          const breathe    = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * breathFreq + c._blobPhase)
+          const baseAlpha  = 0.45 + 0.20 * breathe
 
-            ctx.save()
-            ctx.beginPath()
-            ctx.rect(textX, glyphY - TEXT_HALF_H, animW, TEXT_HALF_H * 2)
-            ctx.clip()
-            ctx.font         = `${NAME_FONT_SIZE}px ui-monospace, 'Courier New', Courier, monospace`
-            ctx.textBaseline = 'middle'
-            ctx.textAlign    = 'left'
-            ctx.fillStyle   = colorForStatus(c.project.status)
-            ctx.globalAlpha = 0.55 * hp
-            ctx.fillText(c.project.name, textX, glyphY)
-            ctx.restore()
+          // Pulse — one cell brightens periodically
+          c._pulse.cooldown -= dt
+          if (c._pulse.cooldown <= 0) {
+            c._pulse.cell     = Math.floor(Math.random() * cells.length)
+            c._pulse.startT   = t
+            c._pulse.cooldown = (hp > 0.05 ? 0.75 : 3.0) * (0.7 + Math.random() * 0.6)
           }
+
+          const color        = colorForStatus(c.project.status)
+          ctx.fillStyle      = color
+          ctx.strokeStyle    = color
+
+          for (let ci = 0; ci < cells.length; ci++) {
+            const cell     = cells[ci]
+            // Drift in sync with water shimmer — sample the same wind-advected fbm field
+            const edgeDist   = Math.min(cell.charIdx, cell.wordLen - 1 - cell.charIdx)
+            const edgeFactor = Math.min(1, edgeDist / 1.5)
+            const cellWX     = glyphX + cell.homeX
+            const cellWY     = glyphY + cell.homeY
+            const n1 = (fbm(cellWX * 0.02 + t * windDriftX,        cellWY * 0.032 + t * windDriftY,        2) - 0.5) * 2
+            const n2 = (fbm(cellWX * 0.02 + t * windDriftX + 17.3, cellWY * 0.032 + t * windDriftY + 31.7, 2) - 0.5) * 2
+            const driftAmp   = CELL_W * (0.08 + cursor.influence * 0.3) * edgeFactor
+            const jx = n1 * driftAmp
+            const jy = n2 * driftAmp * 0.6
+            const pulseAge = t - c._pulse.startT
+            let cellAlpha  = baseAlpha
+            if (ci === c._pulse.cell && pulseAge >= 0 && pulseAge < 0.6) {
+              const ramp  = Math.min(1, pulseAge / 0.2)
+              const decay = pulseAge >= 0.2 ? Math.max(0, 1 - (pulseAge - 0.2) / 0.4) : 1
+              cellAlpha   = Math.min(1, cellAlpha + 0.4 * Math.min(ramp, decay))
+            }
+
+            const px = glyphX + cell.homeX + jx
+            const py = glyphY + cell.homeY + jy
+
+            // blockAlpha: shared by outline + fill layers, both fade out as letters reveal
+            const blockAlpha = cellAlpha * (1 - revealFactor)
+
+            // Outline █ — visible at low zoom, fades out as fill increases
+            if (blockAlpha > 0.005 && fillFactor < 0.995) {
+              ctx.globalAlpha = blockAlpha * (1 - fillFactor)
+              ctx.strokeText('█', px, py)
+            }
+            // Filled █ — fades in as zoom increases past OUTLINE_FILL_START
+            if (blockAlpha > 0.005 && fillFactor > 0.005) {
+              ctx.globalAlpha = blockAlpha * fillFactor
+              ctx.fillText('█', px, py)
+            }
+            // Actual character — fades in on hover or high zoom
+            if (revealFactor > 0.005) {
+              ctx.globalAlpha = cellAlpha * revealFactor
+              ctx.fillText(cell.revealChar, px, py)
+            }
+          }
+          ctx.globalAlpha = 1
         }
         ctx.restore()
       }
@@ -710,7 +501,6 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
     }
 
     rafId = requestAnimationFrame(frame)
-
     return () => { cancelAnimationFrame(rafId); ro.disconnect() }
   }, [field, creaturesRef])
 
@@ -724,7 +514,10 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
     const creatures = creaturesRef ? creaturesRef.current : []
     for (const c of creatures) {
       const rx = worldX - c.x, ry = worldY - c.y
-      if (Math.sqrt(rx * rx + ry * ry) < c.radius * 2.5) {
+      const dim = nameBlobDims[c.slug]
+      const hw = dim ? dim.halfW + GLYPH_MASK_MARGIN : 20
+      const hh = dim ? dim.halfH + GLYPH_MASK_MARGIN : 12
+      if (Math.abs(rx) <= hw && Math.abs(ry) <= hh) {
         if (creatureDragRef) creatureDragRef.current = c
 
         let lastDragX = e.clientX
@@ -765,7 +558,10 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
     const creatures = creaturesRef ? creaturesRef.current : []
     for (const c of creatures) {
       const rx = worldX - c.x, ry = worldY - c.y
-      if (Math.sqrt(rx * rx + ry * ry) < c.radius * 2.5) {
+      const dim = nameBlobDims[c.slug]
+      const hw = dim ? dim.halfW + GLYPH_MASK_MARGIN : 20
+      const hh = dim ? dim.halfH + GLYPH_MASK_MARGIN : 12
+      if (Math.abs(rx) <= hw && Math.abs(ry) <= hh) {
         const p = c.project
         usePondStore.getState().openProject({
           slug:   p.slug,
@@ -789,21 +585,12 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
     let hitSlug = null
     for (const c of creatures) {
       const rx = worldX - c.x, ry = worldY - c.y
-      // Glyph hit radius
-      if (Math.sqrt(rx * rx + ry * ry) < c.radius * 2.5) {
+      const dim = nameBlobDims[c.slug]
+      const hw = dim ? dim.halfW + GLYPH_MASK_MARGIN : 20
+      const hh = dim ? dim.halfH + GLYPH_MASK_MARGIN : 12
+      if (Math.abs(rx) <= hw && Math.abs(ry) <= hh) {
         hitSlug = c.slug
         break
-      }
-      // Text area hit-test — only active once partially unfurled
-      const hp = c.hoverProgress ?? 0
-      if (hp > 0.05) {
-        const gm = glyphMasksRef.current[c.slug]
-        const glyphHW = gm ? gm.totalHalfW : 20
-        const textW = textWidthsRef.current[c.slug] ?? 0
-        if (rx > glyphHW && rx < glyphHW + TEXT_GAP + textW && Math.abs(ry) < TEXT_HALF_H) {
-          hitSlug = c.slug
-          break
-        }
       }
     }
 

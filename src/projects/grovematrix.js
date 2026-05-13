@@ -6,13 +6,6 @@ export default {
   home: { x: 0.42, y: 0.56 },
   glyph: {
     ascii: '∷',
-    blob: [
-      '∴ ∴',
-      ' ∴ ',
-      '∴ ∴',
-    ],
-    svgUrl: '/glyphs/grovematrix_G.svg',
-    svg: `<g fill="#97C459"><circle cx="-7" cy="-6" r="1.2"/><circle cx="1" cy="-9" r="1.2"/><circle cx="8" cy="-3" r="1.2"/><circle cx="-2" cy="-1" r="1.2"/><circle cx="6" cy="5" r="1.2"/><circle cx="-7" cy="5" r="1.2"/><circle cx="0" cy="9" r="1.2"/></g>`,
   },
   behavior: {
     bobAmplitude: 4,
