@@ -31,6 +31,13 @@ const ALPHA_CACHE = Array.from({ length: REGION_BASE_ALPHA.length }, (_, reg) =>
 const GLYPH_MASK_SCALE  = 2   // oversample factor
 const GLYPH_MASK_MARGIN = 4   // world-px halo around the glyph shape
 
+// Hover unfurl constants
+const NAME_FONT_SIZE  = CELL_H * 2           // 22px — project name label
+const TEXT_GAP        = Math.round(CELL_W * 1.2)  // gap between glyph right edge and text start
+const TEXT_HALF_H     = NAME_FONT_SIZE * 0.75     // vertical half-extent of the name text
+const HOVER_IN_SPEED  = 6   // progress units/sec — full unfurl ~167ms
+const HOVER_OUT_SPEED = 4   // progress units/sec — full furl ~250ms
+
 // Rasterises `canvas` (with the glyph drawn at offset MARGIN*SCALE, MARGIN*SCALE,
 // size worldW*SCALE × worldH*SCALE) into a dilated binary mask.
 function buildGlyphMask(canvas, worldW, worldH) {
@@ -75,8 +82,11 @@ const WOBBLE_FREQ  = 0.032
 const WOBBLE_SPEED = 1.2
 
 export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
-  const canvasRef    = useRef(null)
-  const mouseDownPos = useRef(null)
+  const canvasRef      = useRef(null)
+  const mouseDownPos   = useRef(null)
+  const hoveredSlugRef = useRef(null)
+  const textWidthsRef  = useRef({})
+  const glyphMasksRef  = useRef({})
 
   useEffect(() => {
     if (!field) return
@@ -95,12 +105,25 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       }
     }
 
+    // Pre-measure project name text widths for unfurl animation
+    const tmpCtx = document.createElement('canvas').getContext('2d')
+    tmpCtx.font = `${NAME_FONT_SIZE}px ui-monospace, 'Courier New', Courier, monospace`
+    for (const p of projects) {
+      textWidthsRef.current[p.slug] = tmpCtx.measureText(p.name).width
+    }
+
     // ── Glyph masks ────────────────────────────────────────────────────
     // Per-creature pixel masks built from the actual rendered glyph shape.
     // ASCII masks are built synchronously; SVG masks are built on image load.
     const glyphMasks = {}
     const creatureRenderH = CELL_H * 3
     const M = GLYPH_MASK_MARGIN, S = GLYPH_MASK_SCALE
+
+    // Mirror mask into both the local map and the ref so event handlers can read it
+    const setMask = (slug, mask) => {
+      glyphMasks[slug] = mask
+      glyphMasksRef.current[slug] = mask
+    }
 
     // ASCII glyphs — rasterise the character into a small offscreen canvas
     for (const p of projects) {
@@ -118,7 +141,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       octx.textAlign    = 'center'
       octx.fillStyle    = 'white'
       octx.fillText(ascii, oc.width / 2, oc.height / 2)
-      glyphMasks[p.slug] = buildGlyphMask(oc, charW, charH)
+      setMask(p.slug, buildGlyphMask(oc, charW, charH))
     }
 
     // SVG glyphs — build mask once the image has loaded
@@ -134,7 +157,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
         oc.height = Math.ceil((svgH + M * 2) * S)
         const octx = oc.getContext('2d')
         octx.drawImage(img, M * S, M * S, svgW * S, svgH * S)
-        glyphMasks[p.slug] = buildGlyphMask(oc, svgW, svgH)
+        setMask(p.slug, buildGlyphMask(oc, svgW, svgH))
       }
       if (img.complete && img.naturalWidth > 0) buildSvgMask()
       else img.addEventListener('load', buildSvgMask)
@@ -145,6 +168,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
     const animZoom = { v: usePondStore.getState().camera.targetZoom }
     const animPan  = { x: usePondStore.getState().camera.x, y: usePondStore.getState().camera.y }
     let initialized = false
+    let prevTs = null
 
     // ── Resize observer ────────────────────────────────────────────────
 
@@ -182,6 +206,9 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
 
     function frame(ts) {
       rafId = requestAnimationFrame(frame)
+
+      const dt = prevTs === null ? 0 : Math.min((ts - prevTs) / 1000, 0.1)
+      prevTs = ts
 
       const store     = usePondStore.getState()
       const { targetZoom, pivot } = store.camera
@@ -221,6 +248,18 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const cssW = canvas.width  / dpr
       const cssH = canvas.height / dpr
 
+      // ── Animate hoverProgress per creature ────────────────────────────
+      const currentHoveredSlug = hoveredSlugRef.current
+      const creatures = creaturesRef ? creaturesRef.current : []
+      for (const c of creatures) {
+        const isHovered = c.slug === currentHoveredSlug
+        if (isHovered) {
+          c.hoverProgress = Math.min(1, (c.hoverProgress ?? 0) + HOVER_IN_SPEED * dt)
+        } else {
+          c.hoverProgress = Math.max(0, (c.hoverProgress ?? 0) - HOVER_OUT_SPEED * dt)
+        }
+      }
+
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.save()
       ctx.scale(dpr, dpr)
@@ -240,10 +279,13 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const row0 = Math.max(0,              Math.floor(wT / CELL_H) - 1)
       const row1 = Math.min(field.rows - 1, Math.ceil( wB / CELL_H) + 1)
 
-      // Pre-filter creatures whose influence circle touches the visible rect
-      const creatures    = creaturesRef ? creaturesRef.current : []
+      // Pre-filter creatures — extend bounding box to include unfurling text
       const visCreatures = creatures.filter(c => {
-        const r1 = c.influenceRadius ?? ((c.radius ?? 12) * 4)
+        const hp = c.hoverProgress ?? 0
+        const gm = glyphMasks[c.slug]
+        const glyphHW = gm ? gm.totalHalfW : (c.radius ?? 12) * 4
+        const textExtra = hp > 0 ? TEXT_GAP + (textWidthsRef.current[c.slug] ?? 0) * hp : 0
+        const r1 = Math.max(c.influenceRadius ?? ((c.radius ?? 12) * 4), glyphHW + textExtra)
         return c.x + r1 > wL && c.x - r1 < wR && c.y + r1 > wT && c.y - r1 < wB
       })
       const hasFlow = visCreatures.length > 0
@@ -262,7 +304,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
 
           const baseWx = cx * CELL_W
 
-          // Glyph clearance — pixel-mask test against each visible creature's glyph shape.
+          // Glyph + text clearance — pixel-mask test plus animated text rectangle.
           // AABB pre-reject keeps the common (far-away) case cheap.
           const cellCx = baseWx + CELL_W * 0.5
           const cellCy = baseWy + CELL_H * 0.5
@@ -271,13 +313,24 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
             const lx = cellCx - c.x, ly = cellCy - c.y
             const gm = glyphMasks[c.slug]
             if (gm) {
-              if (Math.abs(lx) > gm.totalHalfW || Math.abs(ly) > gm.totalHalfH) continue
-              const mx = Math.min(gm.width  - 1, Math.round((lx + gm.totalHalfW) * GLYPH_MASK_SCALE))
-              const my = Math.min(gm.height - 1, Math.round((ly + gm.totalHalfH) * GLYPH_MASK_SCALE))
-              if (gm.data[my * gm.width + mx]) { inClearance = true; break }
+              if (Math.abs(lx) <= gm.totalHalfW && Math.abs(ly) <= gm.totalHalfH) {
+                const mx = Math.min(gm.width  - 1, Math.round((lx + gm.totalHalfW) * GLYPH_MASK_SCALE))
+                const my = Math.min(gm.height - 1, Math.round((ly + gm.totalHalfH) * GLYPH_MASK_SCALE))
+                if (gm.data[my * gm.width + mx]) { inClearance = true; break }
+              }
             } else {
               // Mask not ready yet — tight circle fallback
               if (lx * lx + ly * ly < 400) { inClearance = true; break }  // 20px radius
+            }
+            // Text clearance — clear the area the unfurling name occupies
+            const hp = c.hoverProgress ?? 0
+            if (hp > 0.01) {
+              const glyphHW = gm ? gm.totalHalfW : 20
+              const animW   = (textWidthsRef.current[c.slug] ?? 0) * hp
+              if (lx > glyphHW && lx < glyphHW + TEXT_GAP + animW + GLYPH_MASK_MARGIN
+                  && Math.abs(ly) < TEXT_HALF_H) {
+                inClearance = true; break
+              }
             }
           }
           if (inClearance) continue
@@ -316,7 +369,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
         }
       }
 
-      // ── Creature glyphs ─────────────────────────────────────────────────
+      // ── Creature glyphs + hover name unfurl ───────────────────────────
       if (creatures.length > 0) {
         const creatureH = CELL_H * 3
         ctx.save()
@@ -345,13 +398,38 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
             // Render SVG glyph — size proportional to image aspect, same footprint as ASCII glyph
             const svgH = creatureH * 1.4
             const svgW = svgH * (svgImg.naturalWidth / svgImg.naturalHeight)
+            ctx.filter      = 'grayscale(1)'
             ctx.globalAlpha = 0.50
             ctx.drawImage(svgImg, glyphX - svgW / 2, glyphY - svgH / 2, svgW, svgH)
             ctx.globalAlpha = 1
+            ctx.filter      = 'none'
           } else {
             const glyph = c.project?.glyph?.ascii
             if (!glyph) continue
             ctx.fillText(glyph, glyphX, glyphY)
+          }
+
+          // Project name unfurls to the right of the glyph on hover
+          const hp = c.hoverProgress ?? 0
+          if (hp > 0.01) {
+            const gm = glyphMasks[c.slug]
+            const glyphHW = gm
+              ? gm.totalHalfW
+              : creatureH * CHAR_ASPECT * 0.5 + GLYPH_MASK_MARGIN
+            const fullW = textWidthsRef.current[c.slug] ?? 0
+            const animW = fullW * hp
+            const textX = glyphX + glyphHW + TEXT_GAP
+
+            ctx.save()
+            ctx.beginPath()
+            ctx.rect(textX, glyphY - TEXT_HALF_H, animW, TEXT_HALF_H * 2)
+            ctx.clip()
+            ctx.font         = `${NAME_FONT_SIZE}px ui-monospace, 'Courier New', Courier, monospace`
+            ctx.textBaseline = 'middle'
+            ctx.textAlign    = 'left'
+            ctx.fillStyle    = `rgba(255,255,255,${(0.55 * hp).toFixed(3)})`
+            ctx.fillText(c.project.name, textX, glyphY)
+            ctx.restore()
           }
         }
         ctx.restore()
@@ -436,11 +514,34 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
     const worldX = (e.clientX - panX) / zoom
     const worldY = (e.clientY - panY) / zoom
     const creatures = creaturesRef ? creaturesRef.current : []
-    const hit = creatures.some(c => {
+
+    let hitSlug = null
+    for (const c of creatures) {
       const rx = worldX - c.x, ry = worldY - c.y
-      return Math.sqrt(rx * rx + ry * ry) < c.radius * 2.5
-    })
-    e.currentTarget.style.cursor = hit ? 'pointer' : ''
+      // Glyph hit radius
+      if (Math.sqrt(rx * rx + ry * ry) < c.radius * 2.5) {
+        hitSlug = c.slug
+        break
+      }
+      // Text area hit-test — only active once partially unfurled
+      const hp = c.hoverProgress ?? 0
+      if (hp > 0.05) {
+        const gm = glyphMasksRef.current[c.slug]
+        const glyphHW = gm ? gm.totalHalfW : 20
+        const textW = textWidthsRef.current[c.slug] ?? 0
+        if (rx > glyphHW && rx < glyphHW + TEXT_GAP + textW && Math.abs(ry) < TEXT_HALF_H) {
+          hitSlug = c.slug
+          break
+        }
+      }
+    }
+
+    hoveredSlugRef.current = hitSlug
+    e.currentTarget.style.cursor = hitSlug ? 'pointer' : ''
+  }
+
+  function handleMouseLeave() {
+    hoveredSlugRef.current = null
   }
 
   return (
@@ -448,6 +549,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       ref={canvasRef}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       onClick={handleClick}
       style={{ position: 'absolute', inset: 0, display: 'block' }}
     />

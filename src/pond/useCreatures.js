@@ -7,8 +7,9 @@ const BASE_CELL_W = BASE_CELL_H * 0.6
 const TWO_PI      = Math.PI * 2
 
 function buildCreature(p, i, field) {
-  const homeX          = p.home.x * field.cols * BASE_CELL_W
-  const homeY          = p.home.y * field.rows * BASE_CELL_H
+  const pondHome       = field.creatureHomes?.[p.slug]
+  const homeX          = (pondHome?.x ?? p.home.x) * field.cols * BASE_CELL_W
+  const homeY          = (pondHome?.y ?? p.home.y) * field.rows * BASE_CELL_H
   const [periodX, periodY] = p.behavior.bobPeriod
   // Spread phases evenly across creatures; quarter-turn between axes → elliptical orbit
   const phaseX         = (i / projects.length) * TWO_PI
@@ -30,6 +31,7 @@ function buildCreature(p, i, field) {
     omegaY:          TWO_PI / periodY,
     phaseX,
     phaseY,
+    hoverProgress:   0,
   }
 }
 

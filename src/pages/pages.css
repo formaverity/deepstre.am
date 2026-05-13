@@ -1,0 +1,70 @@
+/* Shared styles for simple placeholder / info pages */
+
+.page-root {
+  width: 100vw;
+  min-height: 100dvh;
+  background: var(--color-bg, #0d1410);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  padding: 2rem 1.5rem;
+  gap: 1rem;
+  text-align: center;
+}
+
+.page-breadcrumb {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: rgba(200, 213, 192, 0.28);
+  display: flex;
+  align-items: center;
+}
+
+.page-breadcrumb-link {
+  color: rgba(200, 213, 192, 0.38);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.page-breadcrumb-link:hover {
+  color: rgba(200, 213, 192, 0.72);
+}
+
+.page-breadcrumb-sep {
+  margin: 0 0.25rem;
+  color: rgba(200, 213, 192, 0.18);
+}
+
+.page-breadcrumb-current {
+  color: rgba(200, 213, 192, 0.55);
+}
+
+.page-title {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(200, 213, 192, 0.45);
+}
+
+.page-body {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: rgba(200, 213, 192, 0.2);
+}
+
+.page-link {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: rgba(159, 225, 203, 0.35);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.page-link:hover {
+  color: rgba(159, 225, 203, 0.7);
+}

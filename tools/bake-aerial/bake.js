@@ -158,6 +158,19 @@ export function computeChannels(imageData, cfg = {}) {
     }
   }
 
+  // Pass 4b — water mask override
+  // waterMask: Uint8Array[n] of luminance values resampled to the same grid.
+  //   pixel > 200  → force water (white areas in mask)
+  //   pixel < 55   → deny water; auto-detected water becomes shore (black areas in mask)
+  //   pixel 55-200 → leave auto-detection unchanged (grey / no mask)
+  if (cfg.waterMask) {
+    for (let i = 0; i < n; i++) {
+      const m = cfg.waterMask[i]
+      if      (m > 200)              region[i] = 1
+      else if (m < 55 && region[i] === 1) region[i] = 2
+    }
+  }
+
   // Pass 5 — quantize to Uint8
   const brightnessU8  = new Uint8Array(n)
   const edgeMagU8     = new Uint8Array(n)
@@ -170,6 +183,135 @@ export function computeChannels(imageData, cfg = {}) {
   }
 
   return { brightness: brightnessU8, edgeMag: edgeMagU8, edgeAngle: edgeAngleU8, region }
+}
+
+// Compute pond-specific creature homes.
+//
+// Strategy: farthest-point sampling picks k=n positions that are maximally
+// spread across all water cells, then a greedy min-distance assignment maps
+// each creature to the spread-out seed closest to its default home.
+// This guarantees every creature lands in water while preserving as much of
+// the intended spatial layout as the pond's water shape allows.
+//
+// creatures: array of { slug, home: { x, y } } (normalised 0–1)
+// Returns { [slug]: { x, y } } normalised coordinates.
+export function computeCreatureHomes(region, cols, rows, creatures) {
+  const n = creatures.length
+
+  // MARGIN: keep away from image edges. SHORE: keep away from shoreline (erosion radius).
+  const MARGIN = Math.max(4, Math.round(Math.min(cols, rows) * 0.05))
+  const SHORE  = Math.max(3, Math.round(Math.min(cols, rows) * 0.04))
+
+  function isInteriorWater(x, y, shore) {
+    for (let dy = -shore; dy <= shore; dy++)
+      for (let dx = -shore; dx <= shore; dx++) {
+        const ny = y + dy, nx = x + dx
+        if (ny < 0 || ny >= rows || nx < 0 || nx >= cols || region[ny * cols + nx] !== 1)
+          return false
+      }
+    return true
+  }
+
+  // Prefer eroded interior water cells; fall back progressively if too few.
+  let water = []
+  for (let y = MARGIN; y < rows - MARGIN; y++)
+    for (let x = MARGIN; x < cols - MARGIN; x++)
+      if (isInteriorWater(x, y, SHORE)) water.push({ x, y })
+
+  if (water.length < n * 2) {
+    // Relax shore erosion to half
+    water = []
+    for (let y = MARGIN; y < rows - MARGIN; y++)
+      for (let x = MARGIN; x < cols - MARGIN; x++)
+        if (isInteriorWater(x, y, Math.ceil(SHORE / 2))) water.push({ x, y })
+  }
+
+  if (water.length < n * 2) {
+    // Last resort: all water cells inside image margin
+    water = []
+    for (let y = MARGIN; y < rows - MARGIN; y++)
+      for (let x = MARGIN; x < cols - MARGIN; x++)
+        if (region[y * cols + x] === 1) water.push({ x, y })
+    // Include border cells too if still sparse
+    if (water.length < n * 2)
+      for (let y = 0; y < rows; y++)
+        for (let x = 0; x < cols; x++)
+          if (region[y * cols + x] === 1 &&
+              (y < MARGIN || y >= rows - MARGIN || x < MARGIN || x >= cols - MARGIN))
+            water.push({ x, y })
+  }
+
+  if (water.length === 0) {
+    const homes = {}
+    for (const c of creatures) homes[c.slug] = { x: c.home.x, y: c.home.y }
+    return homes
+  }
+
+  // ── Farthest-point sampling ─────────────────────────────────────────
+  const k    = Math.min(n, water.length)
+  const dist = new Float32Array(water.length).fill(Infinity)
+  const seeds = []
+
+  // First seed: water cell nearest to the water-region centroid
+  const cx0 = water.reduce((s, w) => s + w.x, 0) / water.length
+  const cy0 = water.reduce((s, w) => s + w.y, 0) / water.length
+  let first = 0
+  for (let i = 1; i < water.length; i++) {
+    if ((water[i].x - cx0) ** 2 + (water[i].y - cy0) ** 2 <
+        (water[first].x - cx0) ** 2 + (water[first].y - cy0) ** 2) first = i
+  }
+
+  function addSeed(idx) {
+    seeds.push(water[idx])
+    const { x: sx, y: sy } = water[idx]
+    for (let i = 0; i < water.length; i++) {
+      const d = (water[i].x - sx) ** 2 + (water[i].y - sy) ** 2
+      if (d < dist[i]) dist[i] = d
+    }
+  }
+
+  addSeed(first)
+  while (seeds.length < k) {
+    let best = 0
+    for (let i = 1; i < water.length; i++) if (dist[i] > dist[best]) best = i
+    addSeed(best)
+  }
+
+  // ── Greedy min-distance assignment ─────────────────────────────────
+  const pairs = []
+  for (let ci = 0; ci < n; ci++) {
+    const hx = creatures[ci].home.x * (cols - 1)
+    const hy = creatures[ci].home.y * (rows - 1)
+    for (let si = 0; si < seeds.length; si++) {
+      const d = (seeds[si].x - hx) ** 2 + (seeds[si].y - hy) ** 2
+      pairs.push({ ci, si, d })
+    }
+  }
+  pairs.sort((a, b) => a.d - b.d)
+
+  const usedC = new Uint8Array(n)
+  const usedS = new Uint8Array(seeds.length)
+  const pick  = new Int8Array(n).fill(-1)
+  for (const { ci, si } of pairs) {
+    if (usedC[ci] || usedS[si]) continue
+    pick[ci] = si
+    usedC[ci] = 1
+    usedS[si] = 1
+  }
+
+  const homes = {}
+  for (let ci = 0; ci < n; ci++) {
+    const si = pick[ci]
+    if (si < 0) {
+      homes[creatures[ci].slug] = { x: creatures[ci].home.x, y: creatures[ci].home.y }
+    } else {
+      homes[creatures[ci].slug] = {
+        x: seeds[si].x / (cols - 1),
+        y: seeds[si].y / (rows - 1),
+      }
+    }
+  }
+  return homes
 }
 
 // Pick a single display character for one cell
@@ -192,8 +334,8 @@ export function pickGlyph(b, em, ea, reg, cfg = {}) {
 }
 
 // Assemble the final pond.json payload
-export function packPondJSON({ channels, cfg, meta }) {
-  return {
+export function packPondJSON({ channels, cfg, meta, creatureHomes }) {
+  const payload = {
     version:      '1.0',
     source:       meta.source,
     baked_at:     meta.baked_at,
@@ -211,4 +353,6 @@ export function packPondJSON({ channels, cfg, meta }) {
     ramps:  RAMPS,
     config: cfg,
   }
+  if (creatureHomes) payload.creature_homes = creatureHomes
+  return payload
 }

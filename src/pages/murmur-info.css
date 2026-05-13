@@ -1,0 +1,230 @@
+/* ── MURMUR about page ─────────────────────────────────────────────────── */
+
+.mi-root {
+  width: 100%;
+  min-height: 100dvh;
+  background: #0d1410;
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5rem 1.5rem 4rem;
+  box-sizing: border-box;
+}
+
+.mi-content {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+
+.mi-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.mi-title {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(185, 160, 224, 0.65);
+  margin: 0;
+}
+
+.mi-subtitle {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(200, 213, 192, 0.22);
+  margin: 0;
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────── */
+
+.mi-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mi-heading {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(200, 213, 192, 0.28);
+  font-weight: normal;
+  margin: 0;
+  padding-bottom: 0.6rem;
+  border-bottom: 0.5px solid rgba(200, 213, 192, 0.1);
+}
+
+.mi-body {
+  font-size: 11px;
+  line-height: 1.75;
+  letter-spacing: 0.03em;
+  color: rgba(200, 213, 192, 0.58);
+  margin: 0;
+}
+
+.mi-body em {
+  color: rgba(200, 213, 192, 0.8);
+  font-style: normal;
+}
+
+.mi-body--dim {
+  color: rgba(200, 213, 192, 0.35);
+}
+
+/* ── Mode blocks ───────────────────────────────────────────────────────── */
+
+.mi-mode-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.mi-mode-name {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(185, 160, 224, 0.6);
+  margin: 0;
+}
+
+.mi-steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  list-style: decimal;
+}
+
+.mi-steps li {
+  font-size: 11px;
+  line-height: 1.65;
+  letter-spacing: 0.03em;
+  color: rgba(200, 213, 192, 0.52);
+}
+
+.mi-steps li strong {
+  color: rgba(200, 213, 192, 0.72);
+  font-weight: normal;
+}
+
+.mi-note {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: rgba(200, 213, 192, 0.25);
+  margin: 0;
+  padding-top: 0.4rem;
+}
+
+.mi-key {
+  display: inline-block;
+  background: rgba(200, 213, 192, 0.06);
+  border: 0.5px solid rgba(200, 213, 192, 0.2);
+  color: rgba(200, 213, 192, 0.45);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  padding: 0.08rem 0.3rem;
+  border-radius: 2px;
+  font-style: normal;
+}
+
+/* ── Cloud list ────────────────────────────────────────────────────────── */
+
+.mi-cloud-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+.mi-cloud {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-bottom: 1.4rem;
+  border-bottom: 0.5px solid rgba(200, 213, 192, 0.08);
+}
+
+.mi-cloud:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.mi-cloud-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.mi-cloud-name {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(185, 160, 224, 0.7);
+}
+
+.mi-cloud-meta {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: rgba(200, 213, 192, 0.25);
+}
+
+.mi-cloud-desc {
+  font-size: 11px;
+  line-height: 1.7;
+  letter-spacing: 0.03em;
+  color: rgba(200, 213, 192, 0.5);
+  margin: 0;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+
+.mi-footer {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  padding-top: 0.5rem;
+}
+
+.mi-back {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgba(200, 213, 192, 0.38);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.mi-back:hover {
+  color: rgba(200, 213, 192, 0.75);
+}
+
+.mi-back--dim {
+  color: rgba(200, 213, 192, 0.18);
+}
+
+.mi-back--dim:hover {
+  color: rgba(200, 213, 192, 0.45);
+}
+
+/* ── Mobile ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 639px) {
+  .mi-root {
+    padding: 4rem 1rem 3rem;
+  }
+
+  .mi-steps {
+    padding-left: 1rem;
+  }
+}

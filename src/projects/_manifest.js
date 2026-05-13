@@ -5,6 +5,7 @@ import streamwise from './streamwise.js'
 import flo from './flo.js'
 import deepstream from './deepstream.js'
 import thesis from './thesis.js'
+import murmur from './murmur.js'
 
 const projects = [
   g2tree,
@@ -14,6 +15,7 @@ const projects = [
   flo,
   deepstream,
   thesis,
+  murmur,
 ]
 
 export default projects

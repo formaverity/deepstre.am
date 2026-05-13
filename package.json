@@ -8,11 +8,18 @@
     "prebuild": "node scripts/preflight.mjs",
     "build": "vite build",
     "preview": "vite preview",
-    "bake": "node tools/bake-cli.mjs"
+    "bake": "node tools/bake-cli.mjs",
+    "make:default-cloud": "node tools/make-default-cloud.mjs"
   },
   "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "meshline": "^3.3.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.15.0",
+    "three": "^0.169.0",
+    "tone": "^15.1.22",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

@@ -22,20 +22,13 @@
       --font:    ui-monospace, 'Courier New', Courier, monospace;
     }
 
-    html, body {
-      height: 100%;
-      background: var(--bg);
-      color: var(--fg);
-      font-family: var(--font);
-      font-size: 12px;
-    }
-
+    html, body { height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 12px; }
     body { display: flex; overflow: hidden; }
 
     /* ── Sidebar ── */
     .sidebar {
-      width: 280px;
-      min-width: 280px;
+      width: 292px;
+      min-width: 292px;
       overflow-y: auto;
       padding: 14px 12px;
       border-right: 1px solid var(--border);
@@ -44,17 +37,9 @@
       gap: 12px;
     }
 
-    .sidebar h1 {
-      font-size: 13px;
-      color: var(--accent);
-      letter-spacing: 0.06em;
-    }
+    .sidebar h1 { font-size: 13px; color: var(--accent); letter-spacing: 0.06em; }
 
-    .section {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-    }
+    .section { display: flex; flex-direction: column; gap: 7px; }
 
     .section-title {
       font-size: 9px;
@@ -65,179 +50,112 @@
       border-bottom: 1px solid var(--border);
     }
 
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .field-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-    }
-
+    .field { display: flex; flex-direction: column; gap: 2px; }
+    .field-row { display: flex; justify-content: space-between; align-items: baseline; }
     .field label { font-size: 11px; color: var(--muted); }
+    .field .val { font-size: 11px; color: var(--fg); min-width: 44px; text-align: right; }
 
-    .field .val {
-      font-size: 11px;
-      color: var(--fg);
-      min-width: 44px;
-      text-align: right;
-    }
+    input[type='range'] { width: 100%; height: 14px; accent-color: var(--accent); cursor: pointer; background: transparent; }
 
-    input[type='range'] {
-      width: 100%;
-      height: 14px;
-      accent-color: var(--accent);
-      cursor: pointer;
-      background: transparent;
-    }
-
-    input[type='file'] {
-      font-size: 11px;
-      color: var(--muted);
-      width: 100%;
-      cursor: pointer;
-    }
-
+    input[type='file'] { font-size: 11px; color: var(--muted); width: 100%; cursor: pointer; }
     input[type='file']::file-selector-button {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      color: var(--fg);
-      padding: 3px 8px;
-      cursor: pointer;
-      font-family: var(--font);
-      font-size: 11px;
-      margin-right: 8px;
+      background: var(--bg2); border: 1px solid var(--border); color: var(--fg);
+      padding: 3px 8px; cursor: pointer; font-family: var(--font); font-size: 11px; margin-right: 8px;
     }
+    input[type='file']::file-selector-button:hover { border-color: var(--accent); color: var(--accent); }
 
-    input[type='file']::file-selector-button:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
+    .toggle-row { display: flex; align-items: center; gap: 8px; }
     .toggle-row label { font-size: 11px; color: var(--muted); cursor: pointer; }
     input[type='checkbox'] { accent-color: var(--accent); cursor: pointer; }
 
-    /* Buttons */
-    .btn-group { display: flex; flex-direction: column; gap: 5px; }
-
     button {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      color: var(--fg);
-      padding: 6px 10px;
-      cursor: pointer;
-      font-family: var(--font);
-      font-size: 11px;
-      text-align: left;
-      transition: border-color 0.1s, color 0.1s;
+      background: var(--bg2); border: 1px solid var(--border); color: var(--fg);
+      padding: 6px 10px; cursor: pointer; font-family: var(--font); font-size: 11px;
+      text-align: left; transition: border-color 0.1s, color 0.1s;
     }
-
     button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
     button:disabled { opacity: 0.35; cursor: default; }
 
-    .hint {
-      font-size: 10px;
-      color: var(--muted);
-      line-height: 1.6;
+    /* ── Slot tabs ── */
+    .slot-tabs { display: flex; gap: 4px; }
+    .slot-tab { flex: 1; text-align: center; padding: 5px 4px; font-size: 11px; position: relative; }
+    .slot-tab--active { border-color: var(--accent); color: var(--accent); }
+    .slot-tab--loaded::after {
+      content: '●'; position: absolute; top: 3px; right: 4px;
+      font-size: 7px; color: var(--accent); opacity: 0.6;
     }
 
-    /* ── Main ── */
-    .main {
-      flex: 1;
-      overflow-y: auto;
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      min-width: 0;
-    }
+    .slot-status { font-size: 10px; color: var(--muted); min-height: 14px; }
+    .file-label  { font-size: 10px; color: var(--muted); font-style: italic; }
 
-    /* Canvas grid */
-    .canvas-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
-    .canvas-wrap { display: flex; flex-direction: column; gap: 4px; }
-
-    .canvas-label {
-      font-size: 9px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
-
-    .canvas-wrap canvas {
+    /* ── Water mask ── */
+    .mask-preview {
       width: 100%;
       height: auto;
       display: block;
-      background: #000;
       border: 1px solid var(--border);
       image-rendering: pixelated;
+      background: #000;
     }
+    .mask-clear { padding: 4px 8px; font-size: 10px; }
+    .mask-note  { font-size: 10px; color: var(--muted); line-height: 1.5; }
+
+    /* Icon placement status */
+    .arrange-stat {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: 10px;
+    }
+    .arrange-stat span { color: var(--muted); }
+    .arrange-stat .ok  { color: var(--accent); }
+    .arrange-stat .bad { color: #e08060; }
+
+    /* ── Export ── */
+    .export-rows { display: flex; flex-direction: column; gap: 3px; }
+    .export-row { display: grid; grid-template-columns: 3.2rem 1fr 1fr; gap: 3px; align-items: center; }
+    .export-row-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .export-row button { padding: 4px 6px; font-size: 10px; }
+    .export-divider { height: 1px; background: var(--border); margin: 3px 0; }
+
+    .hint { font-size: 10px; color: var(--muted); line-height: 1.6; }
+
+    /* ── Main ── */
+    .main { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+    /* Pond thumbnail strip */
+    .pond-strip { display: flex; gap: 10px; align-items: flex-end; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    .pond-thumb { display: flex; flex-direction: column; gap: 3px; cursor: pointer; opacity: 0.3; transition: opacity 0.15s; }
+    .pond-thumb--loaded  { opacity: 0.65; }
+    .pond-thumb--active  { opacity: 1; }
+    .pond-thumb canvas   { display: block; height: 44px; width: auto; border: 1px solid var(--border); image-rendering: pixelated; background: #000; }
+    .pond-thumb--active canvas { border-color: var(--accent); }
+    .pond-thumb-label    { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; text-align: center; }
+    .pond-thumb--active .pond-thumb-label { color: var(--accent); }
+
+    /* Canvas grid */
+    .canvas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .canvas-wrap { display: flex; flex-direction: column; gap: 4px; }
+    .canvas-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+    .canvas-wrap canvas { width: 100%; height: auto; display: block; background: #000; border: 1px solid var(--border); image-rendering: pixelated; }
 
     /* ASCII preview */
     .ascii-section { display: flex; flex-direction: column; gap: 4px; }
-
-    .ascii-section .ascii-label {
-      font-size: 9px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
-
+    .ascii-section .ascii-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
     .ascii-preview {
       font-family: ui-monospace, 'Courier New', Courier, monospace;
-      font-size: 5.5px;
-      line-height: 1;
-      color: var(--accent);
-      background: #000;
-      white-space: pre;
-      overflow-x: auto;
-      padding: 8px;
-      border: 1px solid var(--border);
-      letter-spacing: 0;
+      font-size: 5.5px; line-height: 1; color: var(--accent); background: #000;
+      white-space: pre; overflow-x: auto; padding: 8px; border: 1px solid var(--border); letter-spacing: 0;
     }
 
     /* Stats */
-    .stats {
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-      padding: 8px 0;
-      border-top: 1px solid var(--border);
-    }
-
+    .stats { display: flex; gap: 20px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--border); }
     .stat { display: flex; flex-direction: column; gap: 2px; }
-
-    .stat-label {
-      font-size: 9px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
+    .stat-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
     .stat-value { font-size: 11px; color: var(--fg); }
 
     /* Placeholder */
-    .placeholder {
-      color: var(--muted);
-      font-size: 11px;
-      padding: 40px 20px;
-      text-align: center;
-      border: 1px solid var(--border);
-      background: var(--bg2);
-    }
+    .placeholder { color: var(--muted); font-size: 11px; padding: 40px 20px; text-align: center; border: 1px solid var(--border); background: var(--bg2); }
   </style>
 </head>
 <body>
@@ -245,25 +163,32 @@
 <aside class="sidebar">
   <h1>bake-aerial</h1>
 
+  <!-- Pond slot selector -->
+  <div class="section">
+    <div class="section-title">Ponds</div>
+    <div class="slot-tabs">
+      <button class="slot-tab slot-tab--active" id="slotBtn0">pond 1</button>
+      <button class="slot-tab"                  id="slotBtn1">pond 2</button>
+      <button class="slot-tab"                  id="slotBtn2">pond 3</button>
+    </div>
+    <div class="slot-status" id="slotStatus">no image — load one below</div>
+  </div>
+
+  <!-- Source -->
   <div class="section">
     <div class="section-title">Source</div>
+    <div class="file-label" id="fileLabel">loading into pond 1</div>
     <input type="file" id="fileInput" accept="image/*">
   </div>
 
   <div class="section">
     <div class="section-title">Grid</div>
     <div class="field">
-      <div class="field-row">
-        <label for="cols">cols</label>
-        <span class="val" id="colsVal">320</span>
-      </div>
+      <div class="field-row"><label for="cols">cols</label><span class="val" id="colsVal">320</span></div>
       <input type="range" id="cols" min="60" max="400" step="4" value="320">
     </div>
     <div class="field">
-      <div class="field-row">
-        <label for="rows">rows</label>
-        <span class="val" id="rowsVal">160</span>
-      </div>
+      <div class="field-row"><label for="rows">rows</label><span class="val" id="rowsVal">160</span></div>
       <input type="range" id="rows" min="30" max="200" step="2" value="160">
     </div>
   </div>
@@ -271,24 +196,15 @@
   <div class="section">
     <div class="section-title">Tone</div>
     <div class="field">
-      <div class="field-row">
-        <label for="clipLo">clip lo</label>
-        <span class="val" id="clipLoVal">2%</span>
-      </div>
+      <div class="field-row"><label for="clipLo">clip lo</label><span class="val" id="clipLoVal">2%</span></div>
       <input type="range" id="clipLo" min="0" max="20" step="0.5" value="2">
     </div>
     <div class="field">
-      <div class="field-row">
-        <label for="clipHi">clip hi</label>
-        <span class="val" id="clipHiVal">98%</span>
-      </div>
+      <div class="field-row"><label for="clipHi">clip hi</label><span class="val" id="clipHiVal">98%</span></div>
       <input type="range" id="clipHi" min="80" max="100" step="0.5" value="98">
     </div>
     <div class="field">
-      <div class="field-row">
-        <label for="gamma">gamma</label>
-        <span class="val" id="gammaVal">0.85</span>
-      </div>
+      <div class="field-row"><label for="gamma">gamma</label><span class="val" id="gammaVal">0.85</span></div>
       <input type="range" id="gamma" min="0.3" max="2.0" step="0.05" value="0.85">
     </div>
     <div class="toggle-row">
@@ -300,10 +216,7 @@
   <div class="section">
     <div class="section-title">Edges <span style="color:var(--muted);font-size:9px">(preview only)</span></div>
     <div class="field">
-      <div class="field-row">
-        <label for="edgeThresh">threshold</label>
-        <span class="val" id="edgeThreshVal">0.15</span>
-      </div>
+      <div class="field-row"><label for="edgeThresh">threshold</label><span class="val" id="edgeThreshVal">0.15</span></div>
       <input type="range" id="edgeThresh" min="0" max="0.6" step="0.01" value="0.15">
     </div>
   </div>
@@ -311,62 +224,100 @@
   <div class="section">
     <div class="section-title">Regions</div>
     <div class="field">
-      <div class="field-row">
-        <label for="waterSat">water sat</label>
-        <span class="val" id="waterSatVal">0.25</span>
-      </div>
+      <div class="field-row"><label for="waterSat">water sat</label><span class="val" id="waterSatVal">0.25</span></div>
       <input type="range" id="waterSat" min="0" max="0.6" step="0.01" value="0.25">
     </div>
     <div class="field">
-      <div class="field-row">
-        <label for="waterHueLo">water hue lo</label>
-        <span class="val" id="waterHueLoVal">160°</span>
-      </div>
+      <div class="field-row"><label for="waterHueLo">water hue lo</label><span class="val" id="waterHueLoVal">160°</span></div>
       <input type="range" id="waterHueLo" min="0" max="360" step="1" value="160">
     </div>
     <div class="field">
-      <div class="field-row">
-        <label for="waterHueHi">water hue hi</label>
-        <span class="val" id="waterHueHiVal">260°</span>
-      </div>
+      <div class="field-row"><label for="waterHueHi">water hue hi</label><span class="val" id="waterHueHiVal">260°</span></div>
       <input type="range" id="waterHueHi" min="0" max="360" step="1" value="260">
     </div>
     <div class="field">
-      <div class="field-row">
-        <label for="vegBias">veg bias</label>
-        <span class="val" id="vegBiasVal">0.08</span>
-      </div>
+      <div class="field-row"><label for="vegBias">veg bias</label><span class="val" id="vegBiasVal">0.08</span></div>
       <input type="range" id="vegBias" min="0" max="0.4" step="0.01" value="0.08">
     </div>
     <div class="field">
-      <div class="field-row">
-        <label for="outLum">out lum</label>
-        <span class="val" id="outLumVal">0.05</span>
-      </div>
+      <div class="field-row"><label for="outLum">out lum</label><span class="val" id="outLumVal">0.05</span></div>
       <input type="range" id="outLum" min="0" max="0.3" step="0.01" value="0.05">
     </div>
   </div>
 
+  <!-- Water mask — optional B&W layer that overrides auto water detection -->
+  <div class="section">
+    <div class="section-title">Water Mask <span style="color:var(--muted);font-size:9px">optional</span></div>
+    <p class="mask-note">Paint a b&w mask of your pond: <strong style="color:var(--fg)">white = water</strong>, <strong style="color:var(--fg)">black = not water</strong>, grey = let auto-detect decide.</p>
+    <input type="file" id="maskInput" accept="image/*">
+    <div class="slot-status" id="maskStatus"></div>
+    <canvas id="maskCanvas" class="mask-preview" style="display:none"></canvas>
+    <button id="clearMask" class="mask-clear" style="display:none">✕ clear mask</button>
+  </div>
+
+  <!-- Icon placement -->
+  <div class="section">
+    <div class="section-title">Icons</div>
+    <div class="toggle-row">
+      <input type="checkbox" id="autoArrange" checked>
+      <label for="autoArrange">auto-place icons in water</label>
+    </div>
+    <div class="arrange-stat" id="arrangeStatus"></div>
+  </div>
+
+  <!-- Export -->
   <div class="section">
     <div class="section-title">Export</div>
-    <div class="btn-group">
-      <button id="exportPond"    disabled>↓ pond.json</button>
-      <button id="exportConfig"  disabled>↓ bake.config.json</button>
-      <button id="exportPreview" disabled>↓ preview.txt</button>
+    <div class="export-rows">
+      <div class="export-row">
+        <span class="export-row-label">pond 1</span>
+        <button id="exportPond0" disabled>↓ pond.json</button>
+        <button id="exportCfg0"  disabled>↓ config</button>
+      </div>
+      <div class="export-row">
+        <span class="export-row-label">pond 2</span>
+        <button id="exportPond1" disabled>↓ pond2.json</button>
+        <button id="exportCfg1"  disabled>↓ config</button>
+      </div>
+      <div class="export-row">
+        <span class="export-row-label">pond 3</span>
+        <button id="exportPond2" disabled>↓ pond3.json</button>
+        <button id="exportCfg2"  disabled>↓ config</button>
+      </div>
     </div>
+    <div class="export-divider"></div>
+    <button id="exportManifest" disabled>↓ ponds-manifest.json</button>
+    <button id="exportPreview"  disabled>↓ preview.txt (active)</button>
   </div>
 
   <div class="hint">
-    1. Load an aerial photo<br>
-    2. Tune knobs — previews update live<br>
-    3. pond.json → public/pond.json<br>
-    4. bake.config.json → repo root
+    1. Select slot → load aerial photo → tune regions<br>
+    2. Load a b&w water mask if auto-detect is off<br>
+    3. Dots on region map show icon placements<br>
+    4. Export pond.json files → ponds-manifest.json
   </div>
 </aside>
 
 <main class="main">
+
+  <!-- Pond thumbnail strip -->
+  <div class="pond-strip" id="pondStrip" style="display:none">
+    <div class="pond-thumb pond-thumb--active" id="thumb0" data-slot="0">
+      <canvas id="thumbCanvas0"></canvas>
+      <div class="pond-thumb-label">pond 1</div>
+    </div>
+    <div class="pond-thumb" id="thumb1" data-slot="1">
+      <canvas id="thumbCanvas1"></canvas>
+      <div class="pond-thumb-label">pond 2</div>
+    </div>
+    <div class="pond-thumb" id="thumb2" data-slot="2">
+      <canvas id="thumbCanvas2"></canvas>
+      <div class="pond-thumb-label">pond 3</div>
+    </div>
+  </div>
+
   <div id="placeholder" class="placeholder">
-    load an aerial image to begin
+    select a pond slot and load an aerial image to begin
   </div>
 
   <div id="previewArea" style="display:none">
@@ -384,11 +335,12 @@
         <canvas id="cvEdge"></canvas>
       </div>
       <div class="canvas-wrap">
-        <div class="canvas-label">regions
+        <div class="canvas-label">regions + icon homes
           <span style="color:var(--water)">■ water</span>
           <span style="color:var(--shore)">■ shore</span>
           <span style="color:var(--veg)">■ veg</span>
           <span style="color:var(--outside)">■ out</span>
+          <span style="color:var(--accent);opacity:0.8">● icons</span>
         </div>
         <canvas id="cvRegion"></canvas>
       </div>
@@ -404,9 +356,13 @@
 </main>
 
 <script type="module">
-import { resampleToGrid, computeChannels, pickGlyph, packPondJSON, DEFAULT_CFG } from './bake.js'
+import { resampleToGrid, computeChannels, pickGlyph, packPondJSON, computeCreatureHomes, DEFAULT_CFG } from './bake.js'
 
-// Region palette as [r,g,b] matching CSS vars
+// ── Constants ──────────────────────────────────────────────────────────
+
+const POND_FILES = ['pond.json',  'pond2.json',  'pond3.json']
+const CFG_FILES  = ['bake.config.json', 'bake2.config.json', 'bake3.config.json']
+
 const REGION_RGB = [
   [0x44, 0x44, 0x44],  // 0 outside
   [0x4a, 0x8a, 0xa8],  // 1 water
@@ -414,59 +370,212 @@ const REGION_RGB = [
   [0x5a, 0x9c, 0x4e],  // 3 vegetation
 ]
 
-// State
-let imageBitmap    = null
-let sourceFilename = ''
-let lastChannels   = null
-let lastCfg        = null
-let debTimer       = null
+const CREATURES = [
+  { slug: 'g2tree',      home: { x: 0.32, y: 0.40 } },
+  { slug: 'beechlens',   home: { x: 0.58, y: 0.28 } },
+  { slug: 'grovematrix', home: { x: 0.42, y: 0.56 } },
+  { slug: 'streamwise',  home: { x: 0.66, y: 0.62 } },
+  { slug: 'flo',         home: { x: 0.28, y: 0.68 } },
+  { slug: 'deepstream',  home: { x: 0.50, y: 0.42 } },
+  { slug: 'thesis',      home: { x: 0.40, y: 0.30 } },
+  { slug: 'murmur',      home: { x: 0.52, y: 0.50 } },
+]
 
-// DOM
-const fileInput    = document.getElementById('fileInput')
-const placeholder  = document.getElementById('placeholder')
-const previewArea  = document.getElementById('previewArea')
-const cvSource     = document.getElementById('cvSource')
-const cvBrightness = document.getElementById('cvBrightness')
-const cvEdge       = document.getElementById('cvEdge')
-const cvRegion     = document.getElementById('cvRegion')
-const asciiPre     = document.getElementById('asciiPre')
-const statsPanel   = document.getElementById('statsPanel')
-const btnPond      = document.getElementById('exportPond')
-const btnConfig    = document.getElementById('exportConfig')
-const btnPreview   = document.getElementById('exportPreview')
+const CHAR_ASPECT = 0.6
 
-// ── Helpers ──────────────────────────────────────────────────────────
+// ── Per-slot state ─────────────────────────────────────────────────────
+
+const slots = Array.from({ length: 3 }, () => ({
+  bitmap:          null,
+  filename:        '',
+  channels:        null,
+  regionImgData:   null,
+  creatureHomes:   null,
+  waterMaskBitmap: null,   // original uploaded bitmap for mask
+  cfg:             { ...DEFAULT_CFG },
+}))
+
+let active   = 0
+let debTimer = null
+
+// ── DOM references ─────────────────────────────────────────────────────
+
+const slotBtns      = [0, 1, 2].map(i => document.getElementById(`slotBtn${i}`))
+const thumbEls      = [0, 1, 2].map(i => document.getElementById(`thumb${i}`))
+const thumbCanvases = [0, 1, 2].map(i => document.getElementById(`thumbCanvas${i}`))
+
+const fileInput     = document.getElementById('fileInput')
+const fileLabel     = document.getElementById('fileLabel')
+const slotStatus    = document.getElementById('slotStatus')
+const placeholder   = document.getElementById('placeholder')
+const previewArea   = document.getElementById('previewArea')
+const pondStrip     = document.getElementById('pondStrip')
+
+const maskInput     = document.getElementById('maskInput')
+const maskCanvas    = document.getElementById('maskCanvas')
+const maskStatus    = document.getElementById('maskStatus')
+const clearMaskBtn  = document.getElementById('clearMask')
+const autoArrangeCk = document.getElementById('autoArrange')
+const arrangeStatus = document.getElementById('arrangeStatus')
+
+const cvSource      = document.getElementById('cvSource')
+const cvBrightness  = document.getElementById('cvBrightness')
+const cvEdge        = document.getElementById('cvEdge')
+const cvRegion      = document.getElementById('cvRegion')
+const asciiPre      = document.getElementById('asciiPre')
+const statsPanel    = document.getElementById('statsPanel')
+
+const exportPondBtns = [0, 1, 2].map(i => document.getElementById(`exportPond${i}`))
+const exportCfgBtns  = [0, 1, 2].map(i => document.getElementById(`exportCfg${i}`))
+const exportManifest = document.getElementById('exportManifest')
+const exportPreview  = document.getElementById('exportPreview')
+
+const colsEl       = document.getElementById('cols')
+const rowsEl       = document.getElementById('rows')
+const clipLoEl     = document.getElementById('clipLo')
+const clipHiEl     = document.getElementById('clipHi')
+const gammaEl      = document.getElementById('gamma')
+const invertEl     = document.getElementById('invert')
+const edgeThreshEl = document.getElementById('edgeThresh')
+const waterSatEl   = document.getElementById('waterSat')
+const waterHueLoEl = document.getElementById('waterHueLo')
+const waterHueHiEl = document.getElementById('waterHueHi')
+const vegBiasEl    = document.getElementById('vegBias')
+const outLumEl     = document.getElementById('outLum')
+
+// ── Settings helpers ───────────────────────────────────────────────────
 
 function getCfg() {
   return {
-    cols:          +document.getElementById('cols').value,
-    rows:          +document.getElementById('rows').value,
-    clipLo:        +document.getElementById('clipLo').value / 100,
-    clipHi:        +document.getElementById('clipHi').value / 100,
-    gamma:         +document.getElementById('gamma').value,
-    invert:         document.getElementById('invert').checked,
-    edgeThreshold: +document.getElementById('edgeThresh').value,
-    waterSat:      +document.getElementById('waterSat').value,
-    waterHueLo:    +document.getElementById('waterHueLo').value,
-    waterHueHi:    +document.getElementById('waterHueHi').value,
-    vegBias:       +document.getElementById('vegBias').value,
-    outLum:        +document.getElementById('outLum').value,
+    cols:          +colsEl.value,
+    rows:          +rowsEl.value,
+    clipLo:        +clipLoEl.value / 100,
+    clipHi:        +clipHiEl.value / 100,
+    gamma:         +gammaEl.value,
+    invert:         invertEl.checked,
+    edgeThreshold: +edgeThreshEl.value,
+    waterSat:      +waterSatEl.value,
+    waterHueLo:    +waterHueLoEl.value,
+    waterHueHi:    +waterHueHiEl.value,
+    vegBias:       +vegBiasEl.value,
+    outLum:        +outLumEl.value,
   }
 }
 
-function syncDisplays() {
-  document.getElementById('colsVal').textContent      = document.getElementById('cols').value
-  document.getElementById('rowsVal').textContent      = document.getElementById('rows').value
-  document.getElementById('clipLoVal').textContent    = document.getElementById('clipLo').value + '%'
-  document.getElementById('clipHiVal').textContent    = document.getElementById('clipHi').value + '%'
-  document.getElementById('gammaVal').textContent     = (+document.getElementById('gamma').value).toFixed(2)
-  document.getElementById('edgeThreshVal').textContent = (+document.getElementById('edgeThresh').value).toFixed(2)
-  document.getElementById('waterSatVal').textContent  = (+document.getElementById('waterSat').value).toFixed(2)
-  document.getElementById('waterHueLoVal').textContent = document.getElementById('waterHueLo').value + '°'
-  document.getElementById('waterHueHiVal').textContent = document.getElementById('waterHueHi').value + '°'
-  document.getElementById('vegBiasVal').textContent   = (+document.getElementById('vegBias').value).toFixed(2)
-  document.getElementById('outLumVal').textContent    = (+document.getElementById('outLum').value).toFixed(2)
+function applyCfg(cfg) {
+  colsEl.value       = cfg.cols
+  rowsEl.value       = cfg.rows
+  clipLoEl.value     = cfg.clipLo * 100
+  clipHiEl.value     = cfg.clipHi * 100
+  gammaEl.value      = cfg.gamma
+  invertEl.checked   = cfg.invert
+  edgeThreshEl.value = cfg.edgeThreshold
+  waterSatEl.value   = cfg.waterSat
+  waterHueLoEl.value = cfg.waterHueLo
+  waterHueHiEl.value = cfg.waterHueHi
+  vegBiasEl.value    = cfg.vegBias
+  outLumEl.value     = cfg.outLum
+  syncDisplays()
 }
+
+function syncDisplays() {
+  document.getElementById('colsVal').textContent       = colsEl.value
+  document.getElementById('rowsVal').textContent       = rowsEl.value
+  document.getElementById('clipLoVal').textContent     = clipLoEl.value + '%'
+  document.getElementById('clipHiVal').textContent     = clipHiEl.value + '%'
+  document.getElementById('gammaVal').textContent      = (+gammaEl.value).toFixed(2)
+  document.getElementById('edgeThreshVal').textContent = (+edgeThreshEl.value).toFixed(2)
+  document.getElementById('waterSatVal').textContent   = (+waterSatEl.value).toFixed(2)
+  document.getElementById('waterHueLoVal').textContent = waterHueLoEl.value + '°'
+  document.getElementById('waterHueHiVal').textContent = waterHueHiEl.value + '°'
+  document.getElementById('vegBiasVal').textContent    = (+vegBiasEl.value).toFixed(2)
+  document.getElementById('outLumVal').textContent     = (+outLumEl.value).toFixed(2)
+}
+
+// ── Water mask helpers ─────────────────────────────────────────────────
+
+// Resample the mask bitmap to the current grid and extract luminance as Uint8Array
+function resampleMaskToGrid(bitmap, cols, rows) {
+  const imgData = resampleToGrid(bitmap, cols, rows)
+  const mask = new Uint8Array(cols * rows)
+  for (let i = 0; i < cols * rows; i++) {
+    const r = imgData.data[i * 4], g = imgData.data[i * 4 + 1], b = imgData.data[i * 4 + 2]
+    mask[i] = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
+  }
+  return mask
+}
+
+// Update the sidebar mask preview canvas from the bitmap (shown at source resolution)
+function renderMaskPreview(bitmap) {
+  const aspect = bitmap.width / bitmap.height
+  maskCanvas.width  = bitmap.width
+  maskCanvas.height = bitmap.height
+  maskCanvas.style.aspectRatio = `${bitmap.width} / ${bitmap.height}`
+  const ctx = maskCanvas.getContext('2d')
+  ctx.drawImage(bitmap, 0, 0)
+}
+
+function updateMaskUI() {
+  const slot = slots[active]
+  const hasMask = slot.waterMaskBitmap !== null
+  maskCanvas.style.display  = hasMask ? 'block' : 'none'
+  clearMaskBtn.style.display = hasMask ? 'block' : 'none'
+  maskStatus.textContent = hasMask
+    ? `mask loaded (${slot.waterMaskBitmap.width}×${slot.waterMaskBitmap.height})`
+    : ''
+  if (hasMask) renderMaskPreview(slot.waterMaskBitmap)
+}
+
+// ── Slot switching ─────────────────────────────────────────────────────
+
+function updateTabs() {
+  slotBtns.forEach((btn, i) => {
+    btn.classList.toggle('slot-tab--active', i === active)
+    btn.classList.toggle('slot-tab--loaded', slots[i].bitmap !== null)
+  })
+  thumbEls.forEach((el, i) => {
+    el.classList.toggle('pond-thumb--active', i === active)
+    el.classList.toggle('pond-thumb--loaded', slots[i].bitmap !== null && i !== active)
+  })
+  fileLabel.textContent = `loading into pond ${active + 1}`
+  slotStatus.textContent = slots[active].bitmap
+    ? `${slots[active].filename} · ${slots[active].cfg.cols}×${slots[active].cfg.rows}`
+    : 'no image — load one below'
+}
+
+function updateExportButtons() {
+  exportManifest.disabled = !slots.some(s => s.channels !== null)
+  slots.forEach((s, i) => {
+    exportPondBtns[i].disabled = s.channels === null
+    exportCfgBtns[i].disabled  = s.channels === null
+  })
+  exportPreview.disabled = slots[active].channels === null
+}
+
+function switchSlot(idx) {
+  if (idx === active) return
+  if (slots[active].bitmap) slots[active].cfg = getCfg()
+  active = idx
+  applyCfg(slots[active].cfg)
+  autoArrangeCk.checked = true  // auto-arrange is always on per-slot reset
+  updateTabs()
+  updateMaskUI()
+  updateExportButtons()
+  updateArrangeStatus()
+
+  if (slots[active].bitmap) {
+    previewArea.style.display = 'flex'
+    previewArea.style.flexDirection = 'column'
+    previewArea.style.gap = '14px'
+    placeholder.style.display = 'none'
+    bake()
+  } else {
+    previewArea.style.display = 'none'
+    placeholder.style.display = ''
+  }
+}
+
+// ── Image / render helpers ─────────────────────────────────────────────
 
 function putImageData(canvas, imgData) {
   canvas.width  = imgData.width
@@ -477,10 +586,9 @@ function putImageData(canvas, imgData) {
 function makeGrayscaleImageData(channel, cols, rows) {
   const id = new ImageData(cols, rows)
   for (let i = 0; i < cols * rows; i++) {
-    const v = channel[i]
-    id.data[i * 4]     = v
-    id.data[i * 4 + 1] = v
-    id.data[i * 4 + 2] = v
+    id.data[i * 4]     = channel[i]
+    id.data[i * 4 + 1] = channel[i]
+    id.data[i * 4 + 2] = channel[i]
     id.data[i * 4 + 3] = 255
   }
   return id
@@ -496,6 +604,33 @@ function makeRegionImageData(region, cols, rows) {
     id.data[i * 4 + 3] = 255
   }
   return id
+}
+
+// Overlay icon home dots on the region canvas.
+// Accent-green when auto-arranged (always in water); white if using defaults.
+function renderCreatureOverlay(canvas, cfg, creatureHomes) {
+  const ctx = canvas.getContext('2d')
+  ctx.font = `5px ui-monospace, 'Courier New', Courier, monospace`
+  ctx.textBaseline = 'middle'
+  for (const c of CREATURES) {
+    const home = creatureHomes?.[c.slug] ?? c.home
+    const px = Math.round(home.x * cfg.cols)
+    const py = Math.round(home.y * cfg.rows)
+    ctx.fillStyle = creatureHomes ? 'rgba(159,225,203,0.95)' : 'rgba(255,255,255,0.5)'
+    ctx.fillRect(px - 1, py - 1, 3, 3)
+    ctx.fillStyle = creatureHomes ? 'rgba(159,225,203,0.8)' : 'rgba(255,255,255,0.4)'
+    ctx.fillText(c.slug, px + 3, py)
+  }
+}
+
+function renderThumbnail(idx, regionImgData, cfg) {
+  const tc = thumbCanvases[idx]
+  tc.width  = cfg.cols
+  tc.height = cfg.rows
+  tc.getContext('2d').putImageData(regionImgData, 0, 0)
+  const aspect = cfg.cols / cfg.rows
+  tc.style.height = '44px'
+  tc.style.width  = Math.round(44 * aspect) + 'px'
 }
 
 function buildAscii(channels, cfg) {
@@ -518,57 +653,102 @@ function renderStats(channels, cfg) {
   const n = cfg.cols * cfg.rows
   let sumB = 0, sumE = 0
   const counts = [0, 0, 0, 0]
-  for (let i = 0; i < n; i++) {
-    sumB += brightness[i]
-    sumE += edgeMag[i]
-    counts[region[i]]++
-  }
+  for (let i = 0; i < n; i++) { sumB += brightness[i]; sumE += edgeMag[i]; counts[region[i]]++ }
   const meanB = (sumB / n / 2.55).toFixed(1) + '%'
   const meanE = (sumE / n / 2.55).toFixed(1) + '%'
   const pct   = counts.map(c => (c / n * 100).toFixed(1) + '%')
   const COLORS = ['var(--outside)', 'var(--water)', 'var(--shore)', 'var(--veg)']
   const LABELS = ['outside', 'water', 'shore', 'veg']
   let html = `
-    <div class="stat">
-      <div class="stat-label">mean brightness</div>
-      <div class="stat-value">${meanB}</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">mean edge</div>
-      <div class="stat-value">${meanE}</div>
-    </div>
+    <div class="stat"><div class="stat-label">mean brightness</div><div class="stat-value">${meanB}</div></div>
+    <div class="stat"><div class="stat-label">mean edge</div><div class="stat-value">${meanE}</div></div>
   `
   LABELS.forEach((l, i) => {
-    html += `
-      <div class="stat">
-        <div class="stat-label" style="color:${COLORS[i]}">${l}</div>
-        <div class="stat-value">${pct[i]}</div>
-      </div>
-    `
+    html += `<div class="stat"><div class="stat-label" style="color:${COLORS[i]}">${l}</div><div class="stat-value">${pct[i]}</div></div>`
   })
   statsPanel.innerHTML = html
 }
 
-// ── Bake + render ─────────────────────────────────────────────────────
+// Update the icon placement status row under the toggle
+function updateArrangeStatus() {
+  const slot = slots[active]
+  if (!slot.creatureHomes) {
+    arrangeStatus.innerHTML = slot.channels
+      ? '<span>auto-arrange off — using default positions</span>'
+      : ''
+    return
+  }
+  const region = slot.channels?.region
+  const cfg    = slot.cfg
+  if (!region) { arrangeStatus.innerHTML = ''; return }
+  let ok = 0, bad = 0
+  for (const c of CREATURES) {
+    const h  = slot.creatureHomes[c.slug]
+    const px = Math.round(h.x * (cfg.cols - 1))
+    const py = Math.round(h.y * (cfg.rows - 1))
+    region[py * cfg.cols + px] === 1 ? ok++ : bad++
+  }
+  const parts = []
+  if (ok > 0)  parts.push(`<span class="ok">${ok}/${CREATURES.length} in water</span>`)
+  if (bad > 0) parts.push(`<span class="bad">${bad} outside — try a water mask</span>`)
+  arrangeStatus.innerHTML = parts.join(' · ')
+}
+
+// ── Bake ───────────────────────────────────────────────────────────────
+
+function syncColsFromAspect() {
+  const slot = slots[active]
+  if (!slot.bitmap) return
+  const rows     = +rowsEl.value
+  const autoCols = Math.round(rows * (slot.bitmap.width / slot.bitmap.height) / CHAR_ASPECT)
+  colsEl.value   = Math.max(+colsEl.min, Math.min(+colsEl.max, autoCols))
+  syncDisplays()
+}
 
 function bake() {
-  if (!imageBitmap) return
-  const cfg       = getCfg()
-  const imageData = resampleToGrid(imageBitmap, cfg.cols, cfg.rows)
-  const channels  = computeChannels(imageData, cfg)
-  lastChannels    = channels
-  lastCfg         = cfg
+  const slot = slots[active]
+  if (!slot.bitmap) return
 
-  putImageData(cvSource, imageData)
+  const cfg  = getCfg()
+  slot.cfg   = cfg
+
+  // Attach water mask to cfg if one is loaded for this slot
+  if (slot.waterMaskBitmap) {
+    cfg.waterMask = resampleMaskToGrid(slot.waterMaskBitmap, cfg.cols, cfg.rows)
+  }
+
+  const imageData = resampleToGrid(slot.bitmap, cfg.cols, cfg.rows)
+  const channels  = computeChannels(imageData, cfg)
+  slot.channels   = channels
+
+  const regionImgData = makeRegionImageData(channels.region, cfg.cols, cfg.rows)
+  slot.regionImgData  = regionImgData
+
+  // Icon placement — compute when toggle is on
+  const doArrange = autoArrangeCk.checked
+  if (doArrange) {
+    slot.creatureHomes = computeCreatureHomes(channels.region, cfg.cols, cfg.rows, CREATURES)
+  } else {
+    slot.creatureHomes = null
+  }
+
+  putImageData(cvSource,     imageData)
   putImageData(cvBrightness, makeGrayscaleImageData(channels.brightness, cfg.cols, cfg.rows))
   putImageData(cvEdge,       makeGrayscaleImageData(channels.edgeMag,    cfg.cols, cfg.rows))
-  putImageData(cvRegion,     makeRegionImageData(channels.region,         cfg.cols, cfg.rows))
+  putImageData(cvRegion,     regionImgData)
+  renderCreatureOverlay(cvRegion, cfg, slot.creatureHomes)
+
   asciiPre.textContent = buildAscii(channels, cfg)
   renderStats(channels, cfg)
+  renderThumbnail(active, regionImgData, cfg)
 
-  btnPond.disabled    = false
-  btnConfig.disabled  = false
-  btnPreview.disabled = false
+  if (slots.some(s => s.bitmap)) pondStrip.style.display = 'flex'
+
+  updateTabs()
+  updateExportButtons()
+  updateArrangeStatus()
+
+  slotStatus.textContent = `${slot.filename} · ${cfg.cols}×${cfg.rows}`
 }
 
 function scheduleBake() {
@@ -577,7 +757,7 @@ function scheduleBake() {
   debTimer = setTimeout(bake, 80)
 }
 
-// ── Export ────────────────────────────────────────────────────────────
+// ── Export ─────────────────────────────────────────────────────────────
 
 function download(content, filename, mime) {
   const blob = new Blob([content], { type: mime })
@@ -587,74 +767,101 @@ function download(content, filename, mime) {
   URL.revokeObjectURL(url)
 }
 
-btnPond.addEventListener('click', () => {
-  if (!lastChannels || !lastCfg) return
+function exportPond(idx) {
+  const slot = slots[idx]
+  if (!slot.channels) return
+  const cfg  = slot.cfg
   const pond = packPondJSON({
-    channels: lastChannels,
-    cfg:      lastCfg,
+    channels: slot.channels,
+    cfg,
     meta: {
-      source:       sourceFilename,
+      source:       slot.filename,
       baked_at:     new Date().toISOString(),
-      cols:         lastCfg.cols,
-      rows:         lastCfg.rows,
-      world_aspect: imageBitmap.width / imageBitmap.height,
+      cols:         cfg.cols,
+      rows:         cfg.rows,
+      world_aspect: slot.bitmap.width / slot.bitmap.height,
     },
+    creatureHomes: slot.creatureHomes,
   })
-  download(JSON.stringify(pond, null, 2), 'pond.json', 'application/json')
-})
-
-btnConfig.addEventListener('click', () => {
-  if (!lastCfg) return
-  download(JSON.stringify(lastCfg, null, 2), 'bake.config.json', 'application/json')
-})
-
-btnPreview.addEventListener('click', () => {
-  if (!lastChannels || !lastCfg) return
-  download(buildAscii(lastChannels, lastCfg), 'preview.txt', 'text/plain')
-})
-
-// ── Auto-compute cols from source aspect ──────────────────────────────
-
-const CHAR_ASPECT = 0.6
-
-function syncColsFromAspect() {
-  if (!imageBitmap) return
-  const rows     = +document.getElementById('rows').value
-  const autoCols = Math.round(rows * (imageBitmap.width / imageBitmap.height) / CHAR_ASPECT)
-  const colsEl   = document.getElementById('cols')
-  colsEl.value   = Math.max(+colsEl.min, Math.min(+colsEl.max, autoCols))
-  syncDisplays()
+  download(JSON.stringify(pond, null, 2), POND_FILES[idx], 'application/json')
 }
 
-// ── File load ─────────────────────────────────────────────────────────
+function exportCfg(idx) {
+  const slot = slots[idx]
+  if (!slot.channels) return
+  // Strip the waterMask typed array before serialising — it's a runtime blob
+  const { waterMask: _, ...cfgClean } = slot.cfg
+  download(JSON.stringify(cfgClean, null, 2), CFG_FILES[idx], 'application/json')
+}
 
+exportPondBtns.forEach((btn, i) => btn.addEventListener('click', () => exportPond(i)))
+exportCfgBtns.forEach( (btn, i) => btn.addEventListener('click', () => exportCfg(i)))
+
+exportManifest.addEventListener('click', () => {
+  const loaded = slots.map((s, i) => s.channels ? POND_FILES[i] : null).filter(Boolean)
+  if (!loaded.length) return
+  download(JSON.stringify({ ponds: loaded }, null, 2), 'ponds-manifest.json', 'application/json')
+})
+
+exportPreview.addEventListener('click', () => {
+  const slot = slots[active]
+  if (!slot.channels) return
+  download(buildAscii(slot.channels, slot.cfg), `preview${active > 0 ? active + 1 : ''}.txt`, 'text/plain')
+})
+
+// ── Event listeners ────────────────────────────────────────────────────
+
+slotBtns.forEach((btn, i) => btn.addEventListener('click', () => switchSlot(i)))
+thumbEls.forEach((el,  i) => el.addEventListener('click',  () => switchSlot(i)))
+
+// Pond image file load
 fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0]
   if (!file) return
-  sourceFilename = file.name
-  imageBitmap    = await createImageBitmap(file)
-  placeholder.style.display  = 'none'
-  previewArea.style.display  = 'flex'
+  const slot = slots[active]
+  slot.filename = file.name
+  slot.bitmap   = await createImageBitmap(file)
+  placeholder.style.display = 'none'
+  previewArea.style.display = 'flex'
   previewArea.style.flexDirection = 'column'
-  previewArea.style.gap      = '14px'
+  previewArea.style.gap = '14px'
   syncColsFromAspect()
   bake()
+  fileInput.value = ''
 })
 
-// ── Control listeners ─────────────────────────────────────────────────
+// Water mask file load
+maskInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+  slots[active].waterMaskBitmap = await createImageBitmap(file)
+  updateMaskUI()
+  scheduleBake()
+  maskInput.value = ''
+})
 
-document.getElementById('rows').addEventListener('input', () => {
-  syncColsFromAspect()
+// Clear mask for active slot
+clearMaskBtn.addEventListener('click', () => {
+  slots[active].waterMaskBitmap = null
+  updateMaskUI()
   scheduleBake()
 })
 
-document.querySelectorAll('input[type="range"], input[type="checkbox"]')
-  .forEach(el => {
-    if (el.id !== 'rows') el.addEventListener('input', scheduleBake)
-  })
+// Auto-arrange toggle
+autoArrangeCk.addEventListener('change', scheduleBake)
 
-// Init displays
+// Grid controls
+rowsEl.addEventListener('input', () => { syncColsFromAspect(); scheduleBake() })
+document.querySelectorAll('input[type="range"], input[type="checkbox"]').forEach(el => {
+  if (el.id !== 'rows' && el.id !== 'autoArrange') el.addEventListener('input', scheduleBake)
+})
+
+// ── Init ───────────────────────────────────────────────────────────────
+
 syncDisplays()
+updateTabs()
+updateExportButtons()
+updateArrangeStatus()
 </script>
 
 </body>

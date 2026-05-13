@@ -6,7 +6,7 @@ function b64ToU8(str) {
 }
 
 export function decodePond(json) {
-  const { grid, world_aspect, data, ramps, config } = json
+  const { grid, world_aspect, data, ramps, config, creature_homes } = json
   const { cols, rows } = grid
   return {
     cols,
@@ -18,6 +18,7 @@ export function decodePond(json) {
     region:     b64ToU8(data.region),
     ramps,
     config,
+    creatureHomes: creature_homes ?? null,
   }
 }
 

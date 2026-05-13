@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { usePondField } from '@/pond/usePondField.js'
 import { useCamera } from '@/pond/useCamera.js'
 import { useCreatures } from '@/pond/useCreatures.js'
@@ -6,9 +6,24 @@ import AsciiField from '@/pond/AsciiField.jsx'
 import CameraControls from '@/pond/CameraControls.jsx'
 import ProjectFrame from '@/frames/ProjectFrame.jsx'
 import usePondStore from '@/store/usePondStore.js'
+import projects from '@/projects/_manifest.js'
 import '@/pond/pond.css'
 
 export default function Pond() {
+  // Deep-link: ?project=slug opens a project on load
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get('project')
+    if (!slug) return
+    const p = projects.find(proj => proj.slug === slug)
+    if (!p) return
+    usePondStore.getState().openProject({
+      slug:   p.slug,
+      name:   p.name,
+      status: p.status,
+      mode:   p.frame.mode,
+      target: p.frame.target,
+    })
+  }, [])
   const { field, loading, error } = usePondField()
   // Shared ref: set to the creature being dragged, null otherwise.
   // useCamera reads it to suppress panning; AsciiField writes it on creature mousedown.
