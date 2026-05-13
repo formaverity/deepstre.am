@@ -2,6 +2,25 @@ import { useEffect, useRef, useState } from 'react'
 import useMurmurStore from '@/murmur/store/useMurmurStore.js'
 import { audioEngine } from '@/murmur/audio/AudioEngine.js'
 
+function SensitivityRow() {
+  const sensitivity    = useMurmurStore(s => s.sensitivity)
+  const setSensitivity = useMurmurStore(s => s.setSensitivity)
+  return (
+    <div className="murmur-sensitivity">
+      <span className="murmur-sensitivity-label">SENS</span>
+      <input
+        type="range"
+        className="murmur-sensitivity-slider"
+        min="0.1" max="3" step="0.05"
+        value={sensitivity}
+        onChange={e => setSensitivity(+e.target.value)}
+        aria-label="Reactive sensitivity"
+      />
+      <span className="murmur-sensitivity-val">{sensitivity.toFixed(1)}×</span>
+    </div>
+  )
+}
+
 function fmt(t) {
   const m = Math.floor(t / 60).toString().padStart(2, '0')
   const s = Math.floor(t % 60).toString().padStart(2, '0')
@@ -15,11 +34,13 @@ export default function Transport() {
 
   const [playing,     setPlaying]     = useState(false)
   const [displaySecs, setDisplaySecs] = useState(0)
+  const [looped,      setLooped]      = useState(() => audioEngine.loop)
+  const [bpm,         setBpm]         = useState(null)
   const scrubRef   = useRef()
   const isDragging = useRef(false)
   const rafRef     = useRef()
 
-  // RAF: update scrub position directly (no React re-render) and display time at 1 Hz
+  // RAF: update scrub, playing state, BPM display at low cost
   useEffect(() => {
     const tick = () => {
       const ct = audioEngine.currentTime
@@ -29,10 +50,13 @@ export default function Transport() {
         scrubRef.current.value = ct
       }
 
-      // Floor to int so setDisplaySecs bails out without re-render on same second
       const s = Math.floor(ct)
       setDisplaySecs(prev => prev !== s ? s : prev)
       setPlaying(prev => prev !== ip ? ip : prev)
+      setBpm(prev => {
+        const b = audioEngine.detectedBPM
+        return prev !== b ? b : prev
+      })
 
       rafRef.current = requestAnimationFrame(tick)
     }
@@ -45,6 +69,12 @@ export default function Transport() {
     else audioEngine.play()
   }
 
+  const toggleLoop = () => {
+    const next = !looped
+    audioEngine.setLoop(next)
+    setLooped(next)
+  }
+
   const onScrubStart = () => { isDragging.current = true }
   const onScrubEnd   = (e) => {
     isDragging.current = false
@@ -54,6 +84,8 @@ export default function Transport() {
   if (!isLoaded || mode !== 'reactive') return null
 
   return (
+    <>
+    <SensitivityRow />
     <div className="murmur-transport">
       <button
         className="murmur-transport-play"
@@ -84,6 +116,23 @@ export default function Transport() {
       />
 
       <span className="murmur-transport-time">{fmt(duration)}</span>
+
+      <button
+        className={`murmur-transport-loop${looped ? ' murmur-transport-loop--on' : ''}`}
+        onClick={toggleLoop}
+        title={looped ? 'Loop on' : 'Loop off'}
+        aria-label="Toggle loop"
+        aria-pressed={looped}
+      >
+        ↺
+      </button>
+
+      {bpm && (
+        <span className="murmur-transport-bpm" title="Detected tempo">
+          ♩{bpm}
+        </span>
+      )}
     </div>
+    </>
   )
 }

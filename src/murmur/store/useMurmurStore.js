@@ -38,6 +38,14 @@ function loadMappings() {
   return DEFAULT_MAPPINGS
 }
 
+function loadSensitivity() {
+  try {
+    const v = parseFloat(localStorage.getItem('murmur-sensitivity-v1'))
+    if (!isNaN(v) && v >= 0.1 && v <= 4.0) return v
+  } catch (_) {}
+  return 1.0
+}
+
 const USER_CLOUD_CAP = 2_000_000
 const USER_CLOUD_TARGET = 300_000
 
@@ -141,6 +149,13 @@ const useMurmurStore = create((set, get) => ({
   // Set by PointCloud on mount; audio engine writes uniform values via ref.current
   uniforms: { ref: null },
   setUniformsRef: (ref) => set(s => ({ uniforms: { ...s.uniforms, ref } })),
+
+  // ── Sensitivity (global band-energy multiplier, persisted) ───────────
+  sensitivity: loadSensitivity(),
+  setSensitivity: (v) => {
+    try { localStorage.setItem('murmur-sensitivity-v1', String(v)) } catch (_) {}
+    set({ sensitivity: v })
+  },
 
   // ── Effect mappings (band → effect assignment, persisted) ─────────────
   mappings: loadMappings(),

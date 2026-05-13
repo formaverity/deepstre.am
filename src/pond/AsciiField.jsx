@@ -98,23 +98,47 @@ function phaseFromSeed(str) {
   return (h % 1000) / 1000 * Math.PI * 2
 }
 
-// Procedural amoeba-shaped cluster of █ cells for the zoomed-out view.
-// Shape varies per slug via basePhase; cells use CELL_W/CELL_H grid spacing.
-function buildClusterBlob(slug) {
+// Procedural amoeba-shaped scatter of ASCII dots for the zoomed-out view.
+// Uses the project's own ascii glyph at the centre plus organic dot perimeter.
+// Much sparser than the old █ grid — gives a softer, more ASCII-art feel.
+function buildClusterBlob(slug, ascii) {
   const basePhase = phaseFromSeed(slug + '_cl')
   const cells     = []
-  for (let row = -3; row <= 3; row++) {
-    for (let col = -4; col <= 4; col++) {
-      const dist  = Math.sqrt(col * col * 0.65 + row * row * 1.15)
-      const angle = Math.atan2(row, col)
-      const vary  = 0.55 * Math.sin(angle * 3 + basePhase)
-                  + 0.30 * Math.cos(angle * 5 + basePhase * 1.8)
-                  + 0.20 * Math.sin(angle * 7 + basePhase * 0.9)
-      if (dist < 1.85 + vary) {
-        cells.push({ homeX: col * CELL_W, homeY: row * CELL_H, phase: phaseFromSeed(slug + col + ',' + row) })
-      }
-    }
+
+  // Organic perimeter — 12-16 points on a warped ellipse
+  const N = 12 + Math.floor((phaseFromSeed(slug + '_n') / (Math.PI * 2)) * 4)
+  for (let i = 0; i < N; i++) {
+    const angle = (i / N) * Math.PI * 2 + basePhase * 0.18
+    const warp  = 0.44 * Math.sin(angle * 3 + basePhase)
+                + 0.28 * Math.cos(angle * 5 + basePhase * 1.7)
+                + 0.16 * Math.sin(angle * 7 + basePhase * 0.85)
+    const r   = 1.0 + warp
+    const hx  = Math.round(r * Math.cos(angle) * CELL_W * 3.0)
+    const hy  = Math.round(r * Math.sin(angle) * CELL_H * 1.75)
+    // Outer ring → middle-dot, inner dips → bullet
+    const ch = warp < -0.08 ? '·' : '∙'
+    cells.push({ char: ch, homeX: hx, homeY: hy, phase: phaseFromSeed(slug + i + 'p') })
   }
+
+  // Sparse inner scatter — 3-5 points
+  const innerN = 3 + Math.floor((phaseFromSeed(slug + '_in') / (Math.PI * 2)) * 2)
+  for (let i = 0; i < innerN; i++) {
+    const a  = phaseFromSeed(slug + '_ia' + i)
+    const r  = 0.28 + 0.32 * (phaseFromSeed(slug + '_ir' + i) / (Math.PI * 2))
+    const hx = Math.round(r * Math.cos(a) * CELL_W * 2.4)
+    const hy = Math.round(r * Math.sin(a) * CELL_H * 1.4)
+    cells.push({ char: '·', homeX: hx, homeY: hy, phase: phaseFromSeed(slug + i + 'i') })
+  }
+
+  // Centre: project's own ascii glyph (slightly larger) or fallback ring
+  cells.push({
+    char:  ascii ?? '◦',
+    homeX: 0,
+    homeY: 0,
+    phase: phaseFromSeed(slug + '_c'),
+    size:  ascii ? 1.5 : 1.0,
+  })
+
   return cells
 }
 
@@ -173,7 +197,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
 
     // Zoomed-out amoeba clusters — one blob shape per project
     const clusterBlobs = {}
-    for (const p of projects) clusterBlobs[p.slug] = buildClusterBlob(p.slug)
+    for (const p of projects) clusterBlobs[p.slug] = buildClusterBlob(p.slug, p.glyph?.ascii)
 
     // Fast lookup: Set of "col,row" offsets for exact-cell clearance matching
     const clusterBlobSets = {}
@@ -272,6 +296,10 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       _velBuf: Array.from({ length: 6 }, () => ({ x: 0, y: 0 })),
       _velIdx: 0, _prevX: null, _prevY: null,
     }
+
+    // Smoothed wind drift — lerps toward cursor-biased target so the
+    // water never snaps when the cursor moves.
+    const windDrift = { x: 0.18, y: 0.13 }
 
     let rafId
     const t0       = performance.now()
@@ -428,14 +456,20 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const displacers = visCreatures
       const hasFlow    = displacers.length > 0
 
-      // Wind direction: bias shimmer drift toward cursor position
+      // Wind direction: smoothly bias shimmer drift toward cursor position.
+      // Lerp rate ~0.45/s keeps the water calm — takes ~2s to fully respond.
       const fieldW    = field.cols * CELL_W
       const fieldH    = field.rows * CELL_H
       const hasCursor = cursor.influence > 0.01
       const normCX    = hasCursor ? Math.max(0, Math.min(1, cursor.x / fieldW)) : 0.5
       const normCY    = hasCursor ? Math.max(0, Math.min(1, cursor.y / fieldH)) : 0.5
-      const windDriftX = 0.18 + (normCX - 0.5) * 0.20
-      const windDriftY = 0.13 + (normCY - 0.5) * 0.16
+      const targetDX  = 0.18 + (normCX - 0.5) * 0.12
+      const targetDY  = 0.13 + (normCY - 0.5) * 0.09
+      const lerpW = Math.min(1, dt * 0.45)
+      windDrift.x += (targetDX - windDrift.x) * lerpW
+      windDrift.y += (targetDY - windDrift.y) * lerpW
+      const windDriftX = windDrift.x
+      const windDriftY = windDrift.y
 
       const shimmerIntensity = 0.12
 
@@ -535,13 +569,16 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
             const clusterCells = clusterBlobs[c.slug]
             if (clusterCells?.length) {
               ctx.save()
-              ctx.font         = `${CELL_H}px ui-monospace, 'Courier New', Courier, monospace`
               ctx.textBaseline = 'middle'
               ctx.textAlign    = 'center'
               ctx.fillStyle    = colorForStatus(c.project.status)
+              let lastCellFont = ''
               for (const bc of clusterCells) {
-                ctx.globalAlpha = 0.50 + 0.14 * Math.sin(t * 0.25 + bc.phase * 0.7)
-                ctx.fillText('█', c.x + bc.homeX, c.y + bc.homeY)
+                const fSize = bc.size ? CELL_H * bc.size : CELL_H
+                const fStr  = `${fSize}px ui-monospace, 'Courier New', Courier, monospace`
+                if (fStr !== lastCellFont) { ctx.font = fStr; lastCellFont = fStr }
+                ctx.globalAlpha = 0.42 + 0.22 * Math.sin(t * 0.28 + bc.phase * 0.7)
+                ctx.fillText(bc.char, c.x + bc.homeX, c.y + bc.homeY)
               }
               ctx.globalAlpha = 1
               ctx.restore()

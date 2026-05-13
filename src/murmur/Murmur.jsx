@@ -42,8 +42,9 @@ export default function Murmur() {
 
   const [vignetteActive, setVignetteActive] = useState(false)
   const [noticeText, setNoticeText]         = useState(null)
+  const [exiting, setExiting]               = useState(false)
 
-  // Navigate back to pond — fade audio if active, save session state, then route
+  // Navigate back to pond — fade visual + audio, save session state, then route
   const navigateToPond = useCallback(async () => {
     try {
       const state = useMurmurStore.getState()
@@ -53,10 +54,12 @@ export default function Murmur() {
       }
     } catch (_) {}
 
-    if (audioEngine.isAnyAudioActive) {
-      audioEngine.fadeOut(0.2)
-      await new Promise(r => setTimeout(r, 200))
-    }
+    setExiting(true)  // kick off CSS opacity fade
+
+    if (audioEngine.isAnyAudioActive) audioEngine.fadeOut(0.3)
+
+    await new Promise(r => setTimeout(r, 340))  // wait for fade to complete
+
     audioEngine.fadeIn(0.001)  // reset volume for next visit
     navigate('/')
   }, [navigate])
@@ -159,14 +162,14 @@ export default function Murmur() {
   }, [mode, setCameraTarget, setGrainFrozen])
 
   return (
-    <div className="murmur-root">
+    <div className={`murmur-root${exiting ? ' murmur-root--exiting' : ''}`}>
 
       {/* Vignette — edge darkening during mode transitions */}
       {vignetteActive && <div className="murmur-vignette" aria-hidden="true" />}
 
       {/* Top-left: breadcrumb */}
       <nav className="murmur-breadcrumb" aria-label="breadcrumb">
-        <Link to="/" className="murmur-breadcrumb-link">← pond</Link>
+        <button className="murmur-breadcrumb-link" onClick={navigateToPond}>← pond</button>
       </nav>
 
       {/* Top-right: status + close button */}

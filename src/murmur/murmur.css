@@ -11,6 +11,13 @@
   justify-content: center;
   font-family: ui-monospace, 'Courier New', Courier, monospace;
   overflow: hidden;
+  opacity: 1;
+  transition: opacity 320ms ease-in;
+}
+
+.murmur-root--exiting {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ── Breadcrumb (top-left) ───────────────────────────────────────────── */
@@ -28,8 +35,15 @@
 }
 
 .murmur-breadcrumb-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
   color: rgba(200, 213, 192, 0.38);
   text-decoration: none;
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: inherit;
+  letter-spacing: inherit;
   transition: color 0.15s;
 }
 
@@ -306,6 +320,95 @@
   background: rgba(185, 160, 224, 0.75);
   border: none;
   cursor: pointer;
+}
+
+/* ── Transport: loop toggle + BPM ───────────────────────────────────── */
+
+.murmur-transport-loop {
+  background: none;
+  border: none;
+  color: rgba(200, 213, 192, 0.28);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  width: 16px;
+  text-align: center;
+  transition: color 0.12s;
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  line-height: 1;
+}
+
+.murmur-transport-loop:hover {
+  color: rgba(200, 213, 192, 0.7);
+}
+
+.murmur-transport-loop--on {
+  color: rgba(185, 160, 224, 0.8);
+}
+
+.murmur-transport-bpm {
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  color: rgba(200, 213, 192, 0.22);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  white-space: nowrap;
+}
+
+/* ── Sensitivity row ─────────────────────────────────────────────────── */
+
+.murmur-sensitivity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.8rem;
+  border: 0.5px solid rgba(200, 213, 192, 0.1);
+  background: rgba(7, 11, 8, 0.55);
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.murmur-sensitivity-label {
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(200, 213, 192, 0.28);
+}
+
+.murmur-sensitivity-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100px;
+  height: 1px;
+  background: rgba(200, 213, 192, 0.15);
+  outline: none;
+  cursor: pointer;
+  border-radius: 1px;
+}
+
+.murmur-sensitivity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(185, 160, 224, 0.65);
+  cursor: pointer;
+}
+
+.murmur-sensitivity-slider::-moz-range-thumb {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(185, 160, 224, 0.65);
+  border: none;
+  cursor: pointer;
+}
+
+.murmur-sensitivity-val {
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  color: rgba(200, 213, 192, 0.3);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  min-width: 24px;
 }
 
 /* ── Audio upload (bottom-center) ────────────────────────────────────── */

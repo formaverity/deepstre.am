@@ -1,5 +1,6 @@
 import * as Tone from 'tone'
 import useMurmurStore from '@/murmur/store/useMurmurStore.js'
+import { detectBPM } from './detectBPM.js'
 
 class AudioEngine {
   constructor() {
@@ -15,10 +16,18 @@ class AudioEngine {
     this._startedAt     = 0
     this._lastKnownTime = 0
     this._smooth        = { bass: 0, lowMid: 0, highMid: 0, treble: 0 }
+    this._loop          = true
+    this.detectedBPM    = null
 
     this.chordVoices      = []
     this.chordFilter      = null
     this._chordMasterGain = null
+  }
+
+  get loop() { return this._loop }
+  setLoop(v) {
+    this._loop = v
+    if (this.player) this.player.loop = v
   }
 
   async start() {
@@ -73,8 +82,15 @@ class AudioEngine {
       if (wasPlaying) this.grainPlayer.start()
     }
 
-    this.isReady = true
+    this.isReady     = true
+    this.detectedBPM = null   // clear until analysis completes
     useMurmurStore.getState().setAudioLoaded({ name, duration: this.duration })
+
+    // BPM detection is deferred so it doesn't block playback startup
+    const bufForBPM = audioBuffer
+    setTimeout(() => {
+      try { this.detectedBPM = detectBPM(bufForBPM) } catch (_) {}
+    }, 0)
   }
 
   // ── Signal chain management ─────────────────────────────────────────────
@@ -234,6 +250,7 @@ class AudioEngine {
     const offset = this._lastKnownTime >= this.duration ? 0 : this._lastKnownTime
     this._pauseOffset   = offset
     this._lastKnownTime = offset
+    this.player.loop = this._loop
     const t = Tone.now()
     this.player.start(t, offset)
     this._startedAt = t
@@ -275,7 +292,10 @@ class AudioEngine {
   get currentTime() {
     if (this.isPlaying) {
       const elapsed = Tone.now() - this._startedAt
-      this._lastKnownTime = Math.min(this._pauseOffset + elapsed, this.duration)
+      const raw = this._pauseOffset + elapsed
+      this._lastKnownTime = (this._loop && this.duration > 0)
+        ? raw % this.duration
+        : Math.min(raw, this.duration)
     }
     return this._lastKnownTime
   }
