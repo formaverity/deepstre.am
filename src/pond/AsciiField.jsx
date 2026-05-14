@@ -475,7 +475,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           }
 
           // Cursor wave — soft radial rings, attenuated near blob edges
-          if (cursor._intensity > 0.01) {
+          if (reg === 1 && cursor._intensity > 0.01) {
             const EXCL    = POND_PHYSICS.cursor.waveExclusionPx
             const waveAtt = closestBlobDist === Infinity ? 1 : Math.min(1, closestBlobDist / EXCL)
             if (waveAtt > 0.01) {
