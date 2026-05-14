@@ -51,7 +51,7 @@ const USER_CLOUD_TARGET = 300_000
 
 const useMurmurStore = create((set, get) => ({
   // ── Mode ─────────────────────────────────────────────────────────────
-  mode: 'reactive',    // 'reactive' | 'sculpt'
+  mode: 'playback',   // 'playback' | 'interactive'
   setMode: (m) => set({ mode: m }),
 
   // ── Cloud ─────────────────────────────────────────────────────────────
@@ -204,6 +204,26 @@ const useMurmurStore = create((set, get) => ({
   // ── Grain freeze (SPACE in sculpt mode) ───────────────────────────────
   grainFrozen:    false,
   setGrainFrozen: (v) => set({ grainFrozen: v }),
+
+  // ── Finger smudges (chord interaction visual) ─────────────────────────
+  smudges: [],
+  addSmudge: ({ position, seed, color }) => {
+    const id = `sm-${Date.now()}-${(Math.random() * 0xfffff | 0).toString(36)}`
+    set(s => ({
+      smudges: [...s.smudges.slice(-3), { id, position, seed, color, born: Date.now(), dying: null }]
+    }))
+    return id
+  },
+  releaseSmudge: (id) => set(s => ({
+    smudges: s.smudges.map(sm => sm.id === id ? { ...sm, dying: Date.now() } : sm)
+  })),
+  removeSmudge: (id) => set(s => ({ smudges: s.smudges.filter(sm => sm.id !== id) })),
+
+  // ── Spatial audio ─────────────────────────────────────────────────────
+  spatialEnabled: { playback: true, interactive: false },
+  setSpatialEnabled: (mode, v) => set(s => ({
+    spatialEnabled: { ...s.spatialEnabled, [mode]: v }
+  })),
 
   // ── Shared UI state ───────────────────────────────────────────────────
   infoOpen:    false,

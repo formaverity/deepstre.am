@@ -14,6 +14,7 @@ const usePondStore = create((set, get) => ({
   camera: { zoom: 1.0, targetZoom: 1.0, x: 0, y: 0, pivot: null },
   viewport: { width: 1, height: 1 },
   mouse: { x: 0, y: 0, inside: false },
+  tapRipple: null,      // { x, y, t } world-space, or null
   focusedSlug: null,
   activeProject: null,  // { slug, mode, target } | null
 
@@ -42,6 +43,8 @@ const usePondStore = create((set, get) => ({
 
   setViewport: (w, h) => set({ viewport: { width: w, height: h } }),
   setMouse: (x, y, inside) => set({ mouse: { x, y, inside } }),
+  injectTapRipple: (x, y) => set({ tapRipple: { x, y, t: performance.now() } }),
+  clearTapRipple: () => set({ tapRipple: null }),
   setFocused: (slug) => set({ focusedSlug: slug }),
   openProject: (p) => set({ activeProject: p }),
   closeProject: () => set({ activeProject: null }),

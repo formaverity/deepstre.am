@@ -4,7 +4,8 @@ import { audioEngine } from '@/murmur/audio/AudioEngine.js'
 
 const SHORTCUTS = [
   { key: 'space', label: 'play / freeze' },
-  { key: 'm',     label: 'mode' },
+  { key: 'p',     label: 'playback' },
+  { key: 'i',     label: 'interactive' },
   { key: 'g',     label: 'grid' },
   { key: 'i',     label: 'info' },
   { key: 'r',     label: 'reset cam' },
@@ -13,13 +14,25 @@ const SHORTCUTS = [
 ]
 
 const HELP_ROWS = [
-  { key: 'space', reactive: 'play / pause',     sculpt: 'freeze grain position' },
-  { key: 'm',     reactive: 'switch to sculpt', sculpt: 'switch to reactive' },
-  { key: 'g',     reactive: '—',                sculpt: 'group grid' },
-  { key: 'i',     reactive: 'info card',        sculpt: 'info card' },
-  { key: 'r',     reactive: 'reset camera',     sculpt: 'reset camera' },
-  { key: '?',     reactive: 'this overlay',     sculpt: 'this overlay' },
-  { key: 'esc',   reactive: 'close / pond',     sculpt: 'close / pond' },
+  { key: 'space', playback: 'play / pause',       interactive: 'freeze grain position' },
+  { key: 'p',     playback: 'already playback',   interactive: 'switch to playback' },
+  { key: 'i',     playback: 'switch to interactive', interactive: 'already interactive' },
+  { key: 'g',     playback: '—',                  interactive: 'group grid' },
+  { key: 'i',     playback: 'info card',           interactive: 'info card' },
+  { key: 'r',     playback: 'reset camera',        interactive: 'reset camera' },
+  { key: '?',     playback: 'this overlay',        interactive: 'this overlay' },
+  { key: 'esc',   playback: 'close / pond',        interactive: 'close / pond' },
+]
+
+// Deduplicate the shortcut bar (info 'i' and interactive 'i' collide — show one)
+const SHORTCUT_BAR = [
+  { key: 'space', label: 'play / freeze' },
+  { key: 'p',     label: 'playback' },
+  { key: 'i',     label: 'interactive / info' },
+  { key: 'g',     label: 'grid' },
+  { key: 'r',     label: 'reset cam' },
+  { key: '?',     label: 'help' },
+  { key: 'esc',   label: 'pond' },
 ]
 
 export default function KeyboardHelper({ onNavigateToPond }) {
@@ -29,7 +42,6 @@ export default function KeyboardHelper({ onNavigateToPond }) {
   const navigateToPondRef  = useRef(onNavigateToPond)
   const fadeTimer          = useRef(null)
 
-  // Keep ref current so the keydown closure always calls the latest version
   useEffect(() => { navigateToPondRef.current = onNavigateToPond }, [onNavigateToPond])
 
   // Auto-fade hints after 5s
@@ -40,26 +52,30 @@ export default function KeyboardHelper({ onNavigateToPond }) {
 
   useEffect(() => {
     const handler = (e) => {
-      // Don't fire when user is typing
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
 
       const state = useMurmurStore.getState()
 
       if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault()
-        if (state.mode === 'reactive') {
+        if (state.mode === 'playback') {
           if (!state.audio.isLoaded) return
           audioEngine.isPlaying ? audioEngine.pause() : audioEngine.play()
         } else {
           state.setGrainFrozen(!state.grainFrozen)
         }
-      } else if (e.key === 'm' || e.key === 'M') {
+      } else if (e.key === 'p' || e.key === 'P') {
         if (!state.audio.isLoaded) return
-        state.setMode(state.mode === 'reactive' ? 'sculpt' : 'reactive')
+        state.setMode('playback')
       } else if (e.key === 'i' || e.key === 'I') {
-        state.setInfoOpen(!state.infoOpen)
+        // 'i' is overloaded: if info is open, close it; otherwise toggle based on context
+        if (state.infoOpen) {
+          state.setInfoOpen(false)
+        } else if (state.audio.isLoaded) {
+          state.setMode('interactive')
+        }
       } else if (e.key === 'g' || e.key === 'G') {
-        if (state.mode === 'sculpt') state.toggleGroupGrid()
+        if (state.mode === 'interactive') state.toggleGroupGrid()
       } else if (e.key === 'r' || e.key === 'R') {
         state.resetCamera()
       } else if (e.key === '?') {
@@ -67,7 +83,6 @@ export default function KeyboardHelper({ onNavigateToPond }) {
         helpOpenRef.current = next
         setHelpOpen(next)
       } else if (e.key === 'Escape') {
-        // Priority: 1) close help overlay, 2) close info card, 3) navigate to pond
         if (helpOpenRef.current) {
           helpOpenRef.current = false
           setHelpOpen(false)
@@ -86,8 +101,8 @@ export default function KeyboardHelper({ onNavigateToPond }) {
   return (
     <>
       <div className={`murmur-keyboard-helper${visible ? '' : ' murmur-keyboard-helper--hidden'}`}>
-        {SHORTCUTS.map(s => (
-          <span key={s.key} className="murmur-keyboard-shortcut">
+        {SHORTCUT_BAR.map(s => (
+          <span key={s.key + s.label} className="murmur-keyboard-shortcut">
             <kbd className="murmur-keyboard-key">{s.key}</kbd>
             <span className="murmur-keyboard-label">{s.label}</span>
           </span>
@@ -114,16 +129,16 @@ export default function KeyboardHelper({ onNavigateToPond }) {
               <thead>
                 <tr>
                   <th>key</th>
-                  <th>reactive</th>
-                  <th>sculpt</th>
+                  <th>playback</th>
+                  <th>interactive</th>
                 </tr>
               </thead>
               <tbody>
-                {HELP_ROWS.map(h => (
-                  <tr key={h.key}>
+                {HELP_ROWS.map((h, idx) => (
+                  <tr key={idx}>
                     <td><kbd className="murmur-keyboard-key">{h.key}</kbd></td>
-                    <td>{h.reactive}</td>
-                    <td>{h.sculpt}</td>
+                    <td>{h.playback}</td>
+                    <td>{h.interactive}</td>
                   </tr>
                 ))}
               </tbody>

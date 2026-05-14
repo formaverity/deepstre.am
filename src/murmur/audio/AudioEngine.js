@@ -4,13 +4,15 @@ import { detectBPM } from './detectBPM.js'
 
 class AudioEngine {
   constructor() {
-    this.player      = null
-    this.grainPlayer = null
-    this.analyzer    = null
-    this.buffer      = null
-    this.isReady     = false
-    this.duration    = 0
-    this.name        = ''
+    this.player         = null
+    this.grainPlayer    = null
+    this.analyzer       = null
+    this.stereoBalance  = null   // Tone.Panner — left/right balance
+    this.binauralPanner = null   // native PannerNode (HRTF)
+    this.buffer         = null
+    this.isReady        = false
+    this.duration       = 0
+    this.name           = ''
 
     this._pauseOffset   = 0
     this._startedAt     = 0
@@ -19,9 +21,7 @@ class AudioEngine {
     this._loop          = true
     this.detectedBPM    = null
 
-    this.chordVoices      = []
-    this.chordFilter      = null
-    this._chordMasterGain = null
+    this._chordSets = new Map()  // key → { voices, filter, masterGain }
   }
 
   get loop() { return this._loop }
@@ -37,9 +37,30 @@ class AudioEngine {
   // ── Buffer loading ──────────────────────────────────────────────────────
 
   async loadBuffer(input) {
-    this.stopChord()
-    if (this.isPlaying) this.player.stop()
+    const store = useMurmurStore.getState()
+
+    this.stopAllChords()
+
+    // Dispose old sources — fresh instances prevent stale-connection bugs
+    if (this.player) {
+      try { if (this.isPlaying) this.player.stop() } catch (_) {}
+      try { this.player.disconnect() }               catch (_) {}
+      try { this.player.dispose() }                  catch (_) {}
+      this.player = null
+    }
+    if (this.grainPlayer) {
+      try { this.grainPlayer.stop() }       catch (_) {}
+      try { this.grainPlayer.disconnect() } catch (_) {}
+      try { this.grainPlayer.dispose() }    catch (_) {}
+      this.grainPlayer = null
+    }
+    if (this.buffer) {
+      try { this.buffer.dispose() } catch (_) {}
+      this.buffer = null
+    }
+
     this._pauseOffset   = 0
+    this._startedAt     = 0
     this._lastKnownTime = 0
 
     let arrayBuffer
@@ -56,37 +77,63 @@ class AudioEngine {
       throw new Error('loadBuffer: unsupported input type')
     }
 
-    const audioBuffer = await Tone.getContext().rawContext.decodeAudioData(arrayBuffer)
+    const rawCtx = Tone.getContext().rawContext
+    // .slice(0) prevents ArrayBuffer detachment on some browsers
+    const audioBuffer = await rawCtx.decodeAudioData(arrayBuffer.slice(0))
     const toneBuffer  = new Tone.ToneAudioBuffer(audioBuffer)
 
     this.buffer   = toneBuffer
     this.duration = toneBuffer.duration
     this.name     = name
 
-    // Shared analyser → destination (kept alive across chain swaps)
+    // Persistent mid-chain: stereoBalance → binauralPanner → analyzer → destination
+    // Built once and reused across file loads and mode switches.
     if (!this.analyzer) {
       this.analyzer = new Tone.Analyser({ type: 'fft', size: 1024 })
       this.analyzer.toDestination()
     }
-    if (!this.player) {
-      this.player = new Tone.Player()
-      this.player.connect(this.analyzer)
+    if (!this.binauralPanner) {
+      this.binauralPanner = rawCtx.createPanner()
+      this.binauralPanner.panningModel    = 'HRTF'
+      this.binauralPanner.distanceModel   = 'inverse'
+      this.binauralPanner.refDistance     = 1
+      this.binauralPanner.maxDistance     = 10000
+      this.binauralPanner.rolloffFactor   = 1
+      this.binauralPanner.coneInnerAngle  = 360
+      this.binauralPanner.coneOuterAngle  = 0
+      this.binauralPanner.coneOuterGain   = 0
+      this._setPannerPosition(0, 0, -2)
+      const listener = rawCtx.listener
+      if (listener.positionX) {
+        listener.positionX.value = 0; listener.positionY.value = 0; listener.positionZ.value = 0
+        listener.forwardX.value  = 0; listener.forwardY.value  = 0; listener.forwardZ.value  = -1
+        listener.upX.value = 0; listener.upY.value = 1; listener.upZ.value = 0
+      } else {
+        listener.setPosition(0, 0, 0)
+        listener.setOrientation(0, 0, -1, 0, 1, 0)
+      }
+      this.binauralPanner.connect(this.analyzer.input)
     }
-    this.player.buffer = toneBuffer
+    if (!this.stereoBalance) {
+      this.stereoBalance = new Tone.Panner(0)
+      this.stereoBalance.connect(this.binauralPanner)
+    }
 
-    // Hot-swap grain player buffer if sculpt is active
-    if (this.grainPlayer) {
-      const wasPlaying = this.grainPlayer.state === 'started'
-      if (wasPlaying) this.grainPlayer.stop()
-      this.grainPlayer.buffer = toneBuffer
-      if (wasPlaying) this.grainPlayer.start()
+    // Always create a fresh player; attach to chain based on current mode
+    this.player      = new Tone.Player(toneBuffer)
+    this.player.loop = this._loop
+
+    if (store.mode === 'interactive') {
+      this.attachInteractiveChain()   // creates + connects fresh grainPlayer
+      // player left disconnected; attachPlaybackChain() wires it on mode switch
+    } else {
+      this.player.connect(this.stereoBalance)
     }
 
     this.isReady     = true
-    this.detectedBPM = null   // clear until analysis completes
-    useMurmurStore.getState().setAudioLoaded({ name, duration: this.duration })
+    this.detectedBPM = null
+    store.setAudioLoaded({ name, duration: this.duration })
 
-    // BPM detection is deferred so it doesn't block playback startup
     const bufForBPM = audioBuffer
     setTimeout(() => {
       try { this.detectedBPM = detectBPM(bufForBPM) } catch (_) {}
@@ -95,12 +142,28 @@ class AudioEngine {
 
   // ── Signal chain management ─────────────────────────────────────────────
 
-  attachReactiveChain() {
-    if (!this.player || !this.analyzer) return
-    try { this.player.connect(this.analyzer) } catch (_) {}
+  // ── Internal helper ─────────────────────────────────────────────────────
+
+  _setPannerPosition(x, y, z) {
+    const p = this.binauralPanner
+    if (!p) return
+    if (p.positionX) {
+      p.positionX.value = x
+      p.positionY.value = y
+      p.positionZ.value = z
+    } else {
+      p.setPosition(x, y, z)
+    }
   }
 
-  detachReactiveChain() {
+  // ── Signal chain management ─────────────────────────────────────────────
+
+  attachPlaybackChain() {
+    if (!this.player || !this.stereoBalance) return
+    try { this.player.connect(this.stereoBalance) } catch (_) {}
+  }
+
+  detachPlaybackChain() {
     if (!this.player) return
     if (this.isPlaying) {
       this._lastKnownTime = this.currentTime
@@ -109,8 +172,8 @@ class AudioEngine {
     try { this.player.disconnect() } catch (_) {}
   }
 
-  attachSculptChain() {
-    if (!this.buffer || !this.analyzer) return
+  attachInteractiveChain() {
+    if (!this.buffer || !this.spatialPanner) return
 
     if (!this.grainPlayer) {
       this.grainPlayer = new Tone.GrainPlayer(this.buffer)
@@ -123,14 +186,41 @@ class AudioEngine {
     this.grainPlayer.playbackRate = 1.0
     this.grainPlayer.detune       = 0
 
-    try { this.grainPlayer.connect(this.analyzer) } catch (_) {}
+    // Position grain player near where linear player left off
+    if (this.duration > 0) {
+      const pos = Math.max(0, Math.min(0.999, this._lastKnownTime / this.duration))
+      this.setGrainParams({ position: pos })
+    }
+
+    try { this.grainPlayer.connect(this.stereoBalance) } catch (_) {}
     this.grainPlayer.start()
   }
 
-  detachSculptChain() {
+  detachInteractiveChain() {
     if (!this.grainPlayer) return
+    // Record approximate buffer position so playback can resume nearby
+    if (this.grainPlayer.loopStart != null && this.duration > 0) {
+      this._lastKnownTime = this.grainPlayer.loopStart
+    }
     try { this.grainPlayer.stop() }        catch (_) {}
     try { this.grainPlayer.disconnect() } catch (_) {}
+  }
+
+  // ── Spatial panning ─────────────────────────────────────────────────────
+
+  // Called every frame from SpatialPanner.jsx (inside Canvas)
+  updateSpatialPan({ stereo, x, y, z, enabled }) {
+    if (this.stereoBalance) {
+      const target = enabled ? stereo : 0
+      this.stereoBalance.pan.rampTo(Math.max(-1, Math.min(1, target)), 0.05)
+    }
+    if (this.binauralPanner) {
+      if (enabled) {
+        this._setPannerPosition(x, y, z)
+      } else {
+        this._setPannerPosition(0, 0, -2)
+      }
+    }
   }
 
   // ── Grain parameter control ─────────────────────────────────────────────
@@ -155,10 +245,10 @@ class AudioEngine {
     }
   }
 
-  // ── Chord layer ─────────────────────────────────────────────────────────
+  // ── Chord layer (keyed — each pointer/touch is its own set) ────────────
 
-  startChord({ rootSemitone, intervals, voices, position }) {
-    this.stopChord()
+  startChord(key, { rootSemitone, intervals, voices, position }) {
+    this.stopChord(key)
     if (!this.buffer || !this.analyzer) return
 
     const masterGain = new Tone.Gain(Tone.dbToGain(-12))
@@ -166,11 +256,9 @@ class AudioEngine {
     masterGain.connect(filter)
     filter.connect(this.analyzer)
 
-    this.chordFilter      = filter
-    this._chordMasterGain = masterGain
-
     const baseSemitones = rootSemitone - 60
     const voiceCount    = Math.min(voices, intervals.length)
+    const voiceList     = []
 
     for (let i = 0; i < voiceCount; i++) {
       const totalSt = baseSemitones + intervals[i]
@@ -178,65 +266,63 @@ class AudioEngine {
 
       const gp = new Tone.GrainPlayer(this.buffer)
       gp.loop         = true
-      // Each voice gets progressively larger grains and tighter overlap —
-      // root stays tight and precise, upper harmonics bloom wider
       gp.grainSize    = 0.05 + i * 0.04
       gp.overlap      = Math.max(0.15, 0.65 - i * 0.12)
       gp.playbackRate = rate
 
       if (position !== undefined && this.duration) {
-        // Spread voices evenly across a 35% window of the audio from the tap point,
-        // so each harmonic samples a genuinely different texture
-        const spread    = (voiceCount > 1 ? i / (voiceCount - 1) : 0) * 0.35
-        const voicePos  = (position + spread) % 1.0
-        const pos       = Math.max(0, Math.min(0.999, voicePos)) * this.duration
-        const winSize   = Math.min(0.4, Math.max(0.06, this.duration * (0.06 + i * 0.02)))
-        gp.loopStart  = pos
-        gp.loopEnd    = Math.min(this.duration, pos + winSize)
+        const spread   = (voiceCount > 1 ? i / (voiceCount - 1) : 0) * 0.35
+        const voicePos = (position + spread) % 1.0
+        const pos      = Math.max(0, Math.min(0.999, voicePos)) * this.duration
+        const winSize  = Math.min(0.4, Math.max(0.06, this.duration * (0.06 + i * 0.02)))
+        gp.loopStart   = pos
+        gp.loopEnd     = Math.min(this.duration, pos + winSize)
       }
 
       const voiceGain = new Tone.Gain(1.0)
       gp.connect(voiceGain)
       voiceGain.connect(masterGain)
       gp.start()
-
-      this.chordVoices.push({ grainPlayer: gp, gain: voiceGain })
+      voiceList.push({ grainPlayer: gp, gain: voiceGain })
     }
+
+    this._chordSets.set(key, { voices: voiceList, filter, masterGain })
   }
 
-  updateChord({ filterCutoff, filterQ }) {
-    if (!this.chordFilter) return
+  updateChord(key, { filterCutoff, filterQ }) {
+    const s = this._chordSets.get(key)
+    if (!s?.filter) return
     if (filterCutoff !== undefined) {
-      this.chordFilter.frequency.rampTo(Math.max(20, Math.min(20000, filterCutoff)), 0.05)
+      s.filter.frequency.rampTo(Math.max(20, Math.min(20000, filterCutoff)), 0.05)
     }
     if (filterQ !== undefined) {
-      this.chordFilter.Q.rampTo(Math.max(0.1, Math.min(20, filterQ)), 0.05)
+      s.filter.Q.rampTo(Math.max(0.1, Math.min(20, filterQ)), 0.05)
     }
   }
 
-  stopChord() {
-    const voices = this.chordVoices.splice(0)
-    if (!voices.length) return
+  stopChord(key) {
+    const s = this._chordSets.get(key)
+    if (!s) return
+    this._chordSets.delete(key)
 
     const fadeDur = 0.4
-    voices.forEach(v => {
+    s.voices.forEach(v => {
       try { v.gain.gain.rampTo(0, fadeDur) } catch (_) {}
     })
-
-    const filter = this.chordFilter
-    const master = this._chordMasterGain
-    this.chordFilter      = null
-    this._chordMasterGain = null
-
+    const { filter, masterGain } = s
     setTimeout(() => {
-      voices.forEach(v => {
+      s.voices.forEach(v => {
         try { v.grainPlayer.stop() }       catch (_) {}
         try { v.grainPlayer.disconnect() } catch (_) {}
         try { v.gain.disconnect() }        catch (_) {}
       })
-      try { master?.disconnect() } catch (_) {}
-      try { filter?.disconnect() } catch (_) {}
+      try { masterGain?.disconnect() } catch (_) {}
+      try { filter?.disconnect() }     catch (_) {}
     }, fadeDur * 1000 + 50)
+  }
+
+  stopAllChords() {
+    for (const key of [...this._chordSets.keys()]) this.stopChord(key)
   }
 
   // ── Stop all active audio (for clean navigation exit) ──────────────────
@@ -247,20 +333,11 @@ class AudioEngine {
     this._lastKnownTime = 0
 
     if (this.grainPlayer) {
-      try { this.grainPlayer.stop() }        catch (_) {}
+      try { this.grainPlayer.stop() }       catch (_) {}
       try { this.grainPlayer.disconnect() } catch (_) {}
     }
 
-    const voices = this.chordVoices.splice(0)
-    voices.forEach(v => {
-      try { v.grainPlayer.stop() }       catch (_) {}
-      try { v.grainPlayer.disconnect() } catch (_) {}
-      try { v.gain.disconnect() }        catch (_) {}
-    })
-    try { this._chordMasterGain?.disconnect() } catch (_) {}
-    try { this.chordFilter?.disconnect() }      catch (_) {}
-    this._chordMasterGain = null
-    this.chordFilter      = null
+    this.stopAllChords()
   }
 
   // ── Volume fades for clean chain swaps ──────────────────────────────────
@@ -273,7 +350,7 @@ class AudioEngine {
     Tone.getDestination().volume.rampTo(0, duration)
   }
 
-  // ── Reactive playback ───────────────────────────────────────────────────
+  // ── Linear playback ─────────────────────────────────────────────────────
 
   play() {
     if (!this.isReady || !this.player || this.isPlaying) return
@@ -307,6 +384,18 @@ class AudioEngine {
       this.player.seek(newT)
       this._startedAt = Tone.now()
     }
+    // Also reposition grain player if active (interactive mode)
+    if (this.grainPlayer && this.duration > 0) {
+      this.setGrainParams({ position: newT / this.duration })
+    }
+  }
+
+  // Current playback position in seconds (works in both modes)
+  get playbackSecs() {
+    if (this.grainPlayer?.state === 'started' && this.duration > 0) {
+      return this.grainPlayer.loopStart ?? this._lastKnownTime
+    }
+    return this.currentTime
   }
 
   get isPlaying() {
@@ -316,7 +405,7 @@ class AudioEngine {
   get isAnyAudioActive() {
     return this.player?.state === 'started'
         || this.grainPlayer?.state === 'started'
-        || this.chordVoices.length > 0
+        || this._chordSets.size > 0
   }
 
   get currentTime() {

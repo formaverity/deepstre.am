@@ -7,8 +7,10 @@ import SculptParticles from './SculptParticles.jsx'
 import SculptOverlay from './SculptOverlay.jsx'
 import AudioAtmos from './AudioAtmos.jsx'
 import OrbitLights from './OrbitLights.jsx'
-import ChordController, { ChordRing } from './ChordController.jsx'
+import ChordController from './ChordController.jsx'
+import FingerSmudge from './effects/FingerSmudge.jsx'
 import DitherBleed from './DitherBleed.jsx'
+import SpatialPanner from './SpatialPanner.jsx'
 
 const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width:639px)').matches
 
@@ -34,7 +36,8 @@ export default function PointCloudScene() {
         <ReactiveDriver />
         <SculptDriver />
         <ChordController />
-        <ChordRing />
+        <FingerSmudge />
+        <SpatialPanner />
         <DitherBleed />
       </Canvas>
     </div>

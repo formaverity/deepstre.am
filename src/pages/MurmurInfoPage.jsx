@@ -49,9 +49,9 @@ export default function MurmurInfoPage() {
             a diaphragm displaced by air, translated to numbers, stored. Both are imperfect records
             of a real moment in a real location. MURMUR is what happens when you cross them.
             Load a scan of a grove. Load a field recording, a piece of music, whatever you brought.
-            Watch the cloud respond. Or take the wheel: orbit the camera and let your position
-            in space become the score, the recording scrubbing past you as you move.
-            The instrument is the camera. The score is the cloud. The source material is yours.
+            The cloud responds to what plays through it — or you take the wheel and play the cloud
+            yourself. The instrument is the same either way. What changes is who is listening and who
+            is playing.
           </p>
         </section>
 
@@ -59,31 +59,53 @@ export default function MurmurInfoPage() {
         <section className="mi-section" aria-labelledby="how-heading">
           <h2 id="how-heading" className="mi-heading">how to play it</h2>
 
+          <p className="mi-body">
+            MURMUR plays in two stances.
+          </p>
+
           <div className="mi-mode-block">
-            <p className="mi-mode-name">reactive</p>
+            <p className="mi-mode-name">playback</p>
+            <p className="mi-mode-desc">
+              Observational. Drop in an audio file and press play. The cloud listens. The spectral
+              content of what plays through it determines which spatial regions light up, based on
+              each region's color affinity — different clouds played with the same audio produce
+              different visual responses because the scans were taken at different times, in different
+              seasons, in different places. As you orbit the camera, the stereo image pans with you —
+              the cloud sounds like it is inside the headphones rather than behind them. Headphones
+              bring the binaural panning to life; speakers still work, just narrower. You watch the
+              audio play through the cloud.
+            </p>
             <ol className="mi-steps">
               <li>Drop an audio file (or click the upload bar) to load it into the engine.</li>
-              <li>Press play or hit <kbd className="mi-key">space</kbd>. The cloud responds to frequency bands in real time — bass swells the points, treble shimmers them.</li>
-              <li>Scrub the timeline to navigate the recording. The cloud follows.</li>
-              <li>When nothing is playing, the cloud breathes slowly on its own.</li>
+              <li>Press play or hit <kbd className="mi-key">space</kbd>. Regions of the cloud light up as the spectrum shifts.</li>
+              <li>Orbit to change the stereo pan. The cloud sounds different from different angles.</li>
+              <li>Press and hold anywhere on the cloud to layer a chord over the playing audio.</li>
             </ol>
           </div>
 
           <div className="mi-mode-block">
-            <p className="mi-mode-name">sculpt</p>
+            <p className="mi-mode-name">interactive</p>
+            <p className="mi-mode-desc">
+              Causal. The same cloud, the same audio file — but now the camera is the player. The
+              granular engine reads from the file continuously; your position in space determines
+              where, how fast, and at what pitch. The instrument's geography becomes its harmony.
+            </p>
             <ol className="mi-steps">
-              <li>Load audio first, then switch modes with the toggle or press <kbd className="mi-key">m</kbd>.</li>
+              <li>Load audio, then switch with the toggle at top or press <kbd className="mi-key">i</kbd>.</li>
               <li><strong>Orbit</strong> (drag horizontally) — scrubs through the recording. A full orbit plays the whole file.</li>
               <li><strong>Tilt</strong> (drag vertically) — changes playback rate. Looking at the ground slows and thickens the sound; looking up pitches it higher.</li>
               <li><strong>Dolly</strong> (scroll or pinch) — controls grain size. Move in close for granular texture; pull back for long, phrase-length grains that blur into drones.</li>
               <li><strong>Speed</strong> — how fast you orbit changes overlap density. Still camera is lush; fast sweeping creates stuttery fragmentation.</li>
-              <li>Press <kbd className="mi-key">space</kbd> to freeze the buffer position — the cloud keeps responding to your movement, but the recording stays put. Good for finding a sound, then exploring around it.</li>
+              <li>Press <kbd className="mi-key">space</kbd> to freeze the buffer position — the cloud keeps responding to your movement, but the recording stays put.</li>
+              <li>Press and hold anywhere on the cloud to sustain a chord whose root pitch is determined by where you pressed.</li>
             </ol>
           </div>
 
           <p className="mi-note">
-            Keyboard shortcuts: <kbd className="mi-key">m</kbd> mode · <kbd className="mi-key">i</kbd> info ·{' '}
-            <kbd className="mi-key">r</kbd> reset camera · <kbd className="mi-key">?</kbd> full list
+            Keyboard shortcuts: <kbd className="mi-key">p</kbd> playback &nbsp;·&nbsp;
+            <kbd className="mi-key">i</kbd> interactive &nbsp;·&nbsp;
+            <kbd className="mi-key">r</kbd> reset camera &nbsp;·&nbsp;
+            <kbd className="mi-key">?</kbd> full list
           </p>
         </section>
 

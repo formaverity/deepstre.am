@@ -4,9 +4,10 @@ import { sampleCell } from '@/utils/pondCodec.js'
 import { fbm } from '@/utils/noise.js'
 import { shimmerBrightness } from '@/pond/shimmer.js'
 import { pickGlyph } from '@/pond/glyphs.js'
-import { doubletDisplacement } from '@/pond/displacement.js'
+import { doubletDisplacement, BASE_RADIUS } from '@/pond/displacement.js'
 import projects from '@/projects/_manifest.js'
 import { colorForStatus } from '@/pond/statusColors.js'
+import { POND_PHYSICS } from '@/pond/pondPhysics.js'
 
 const CHAR_ASPECT = 0.6
 const CELL_H      = 11
@@ -60,17 +61,45 @@ function buildGlyphMask(canvas, worldW, worldH) {
   }
 }
 
+// Outward-propagating wave from cursor position.
+// Replaces the old doublet (magnifying-glass) effect with expanding rings.
+function cursorWave(wx, wy, cx, cy, intensity, vx, vy, t) {
+  const W  = POND_PHYSICS.cursor
+  const lx = wx - cx, ly = wy - cy
+  const d2 = lx * lx + ly * ly
+  if (d2 < 1 || d2 > W.waveRadius * W.waveRadius) return null
+  const d  = Math.sqrt(d2)
+  const nx = lx / d, ny = ly / d   // radial unit vec
+
+  const fo  = 1 - d / W.waveRadius
+  const fos = fo * fo * (3 - 2 * fo)  // smoothstep falloff
+
+  const phase = d * W.waveK - t * W.waveOmega
+  const sinP  = Math.sin(phase)
+  const cosP  = Math.cos(phase)
+
+  // Amplitude scales with cursor intensity and speed — still when stationary, active when moving
+  const speed  = Math.sqrt(vx * vx + vy * vy)
+  const velFac = Math.min(1, speed / W.waveVelRef)
+  const amp    = W.waveAmp * intensity * fos * (0.35 + 0.65 * velFac)
+
+  // 80% radial (compression rings) + 20% tangential (organic curl)
+  return {
+    dx: amp * (sinP * 0.8 * nx + cosP * 0.2 * (-ny)),
+    dy: amp * (sinP * 0.8 * ny + cosP * 0.2 *   nx),
+  }
+}
+
 // Wobble constants — ambient noise displacement applied to creature positions
 const WOBBLE_AMP   = 3.0
 const WOBBLE_FREQ  = 0.032
 const WOBBLE_SPEED = 1.2
 
-// Zoom thresholds for the three blob states:
-//   outlined █  →  filled █  →  revealed letters
-const OUTLINE_FILL_START = 0.5   // outline starts filling in
-const OUTLINE_FILL_END   = 1.3   // fully filled by this zoom
-const BLOB_ZOOM_MIN      = 1.6   // filled █ start revealing as letters
-const TEXT_ZOOM_MAX      = 3.2   // reveal complete at this zoom
+// Zoom thresholds: outlined █ → filled █ → revealed letters
+const OUTLINE_FILL_START = 0.5
+const OUTLINE_FILL_END   = 1.3
+const BLOB_ZOOM_MIN      = 1.6
+const TEXT_ZOOM_MAX      = 3.2
 
 function smoothstep(x) {
   const t = Math.max(0, Math.min(1, x))
@@ -85,8 +114,6 @@ function phaseFromSeed(str) {
 }
 
 // Build a blob from the project name as rows of █ characters.
-// 1-word names: single horizontal row centered on the creature.
-// Multi-word names: one row per word, each odd row offset right for stagger.
 function buildNameBlob(slug, name) {
   const words      = name.trim().split(/\s+/)
   const cells      = []
@@ -136,9 +163,12 @@ for (const p of projects) {
 }
 
 export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
-  const canvasRef      = useRef(null)
-  const mouseDownPos   = useRef(null)
-  const hoveredSlugRef = useRef(null)
+  const canvasRef        = useRef(null)
+  const mouseDownPos     = useRef(null)
+  const hoveredSlugRef   = useRef(null)
+  const longPressTimer   = useRef(null)
+  const longPressTouch   = useRef(null)  // {x,y} screen coords of touch start
+  const longPressSlug    = useRef(null)  // slug set by long press (to clear on end)
 
   useEffect(() => {
     if (!field) return
@@ -170,9 +200,14 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       glyphMasks[p.slug] = buildGlyphMask(oc, worldW, worldH)
     }
 
+    // Cursor wave state — intensity is managed via idle/active/leave state machine
+    const C = POND_PHYSICS.cursor
     const cursor = {
       x: 0, y: 0, vx: 0, vy: 0,
-      radius: 12, influenceRadius: 80, influence: 0,
+      influence:  0,   // alias for _intensity (read by wind + blob jitter)
+      _intensity: 0,
+      _isIdle:    true,
+      _idleMs:    0,
       _velBuf: Array.from({ length: 6 }, () => ({ x: 0, y: 0 })),
       _velIdx: 0, _prevX: null, _prevY: null,
     }
@@ -228,9 +263,8 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       animZoom.v = targetZoom
       const zoom = animZoom.v
 
-      // Blob state factors — three stages as zoom increases
-      const fillFactor   = smoothstep((zoom - OUTLINE_FILL_START) / (OUTLINE_FILL_END   - OUTLINE_FILL_START))
-      const zoomReveal   = smoothstep((zoom - BLOB_ZOOM_MIN)      / (TEXT_ZOOM_MAX      - BLOB_ZOOM_MIN))
+      const fillFactor = smoothstep((zoom - OUTLINE_FILL_START) / (OUTLINE_FILL_END - OUTLINE_FILL_START))
+      const zoomReveal = smoothstep((zoom - BLOB_ZOOM_MIN)      / (TEXT_ZOOM_MAX    - BLOB_ZOOM_MIN))
 
       if (pivot && prevAnim > 0.001) {
         const f     = zoom / prevAnim
@@ -244,13 +278,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       }
 
       usePondStore.setState(s => ({
-        camera: {
-          ...s.camera,
-          zoom,
-          x:     animPan.x,
-          y:     animPan.y,
-          pivot: null,
-        },
+        camera: { ...s.camera, zoom, x: animPan.x, y: animPan.y, pivot: null },
       }))
 
       const panX = animPan.x
@@ -260,7 +288,7 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const cssW = canvas.width  / dpr
       const cssH = canvas.height / dpr
 
-      // Animate hoverProgress per creature
+      // Animate hover progress per creature
       const currentHoveredSlug = hoveredSlugRef.current
       const creatures = creaturesRef ? creaturesRef.current : []
       for (const c of creatures) {
@@ -282,7 +310,6 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       ctx.textBaseline = 'top'
       ctx.textAlign    = 'left'
 
-      // Visible world rect (in world px)
       const wL = -panX / zoom,          wT = -panY / zoom
       const wR = (cssW - panX) / zoom,  wB = (cssH - panY) / zoom
 
@@ -300,11 +327,13 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
         return c.x + r > wL && c.x - r < wR && c.y + r > wT && c.y - r < wB
       })
 
-      // Cursor virtual displacer
+      // ── Cursor intensity state machine ─────────────────────────────────
+      // Three states: active (moving) → idle (still in viewport) → leave (outside)
       const mouse = store.mouse
       if (mouse.inside) {
         const wx = (mouse.x - animPan.x) / zoom
         const wy = (mouse.y - animPan.y) / zoom
+
         if (cursor._prevX !== null && dt > 0) {
           const rawVx = (wx - cursor._prevX) / dt
           const rawVy = (wy - cursor._prevY) / dt
@@ -315,18 +344,71 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           cursor.vx = svx / 6
           cursor.vy = svy / 6
         }
-        cursor.x = wx
-        cursor.y = wy
-        cursor._prevX = wx
-        cursor._prevY = wy
-        cursor.influence = Math.min(0.6, cursor.influence + dt * 10)
+        cursor.x = wx; cursor.y = wy
+        cursor._prevX = wx; cursor._prevY = wy
+
+        // Idle detection: track how long cursor has been below speed threshold
+        const speed = Math.sqrt(cursor.vx * cursor.vx + cursor.vy * cursor.vy)
+        if (speed > C.idleSpeedThreshold) {
+          cursor._idleMs = 0
+          cursor._isIdle = false
+        } else {
+          cursor._idleMs += dt * 1000
+          if (cursor._idleMs > C.idleAfterMs) cursor._isIdle = true
+        }
+
+        const targetIntensity = cursor._isIdle ? C.intensityIdle : C.intensityActive
+        if (targetIntensity > cursor._intensity) {
+          // Attack: ramp up to active intensity over activeRampMs
+          cursor._intensity = Math.min(
+            targetIntensity,
+            cursor._intensity + (C.intensityActive / (C.activeRampMs / 1000)) * dt
+          )
+        } else {
+          // Decay to idle: ramp down over idleDecayMs
+          cursor._intensity = Math.max(
+            targetIntensity,
+            cursor._intensity - ((C.intensityActive - C.intensityIdle) / (C.idleDecayMs / 1000)) * dt
+          )
+        }
       } else {
-        cursor.influence = Math.max(0, cursor.influence - dt * 3.33)
-        cursor._prevX = null
-        cursor._prevY = null
+        // Leave: decay to 0 over leaveDecayMs
+        cursor._intensity = Math.max(
+          0,
+          cursor._intensity - (C.intensityActive / (C.leaveDecayMs / 1000)) * dt
+        )
+        cursor._isIdle = true
+        cursor._idleMs = 9999
+        cursor._prevX  = null
+        cursor._prevY  = null
       }
-      const displacers = visCreatures
-      const hasFlow    = displacers.length > 0
+      cursor.influence = cursor._intensity
+
+      // ── Build displacers: creatures + tap ripple ─────────────────────
+      // Cursor no longer acts as a doublet — wave displacement is applied
+      // per-cell in the main loop instead.
+      const displacers = [...visCreatures]
+
+      const tapRipple = store.tapRipple
+      if (tapRipple) {
+        const rippleAge = ts - tapRipple.t
+        if (rippleAge < POND_PHYSICS.mobile.tapRippleFadeMs) {
+          const fade = 1 - rippleAge / POND_PHYSICS.mobile.tapRippleFadeMs
+          displacers.push({
+            x:              tapRipple.x,
+            y:              tapRipple.y,
+            vx:             0,
+            vy:             0,
+            radius:         BASE_RADIUS,
+            influenceRadius: POND_PHYSICS.mobile.tapRippleRadius,
+            influence:      POND_PHYSICS.mobile.tapRippleIntensity * fade,
+          })
+        } else {
+          usePondStore.getState().clearTapRipple()
+        }
+      }
+
+      const hasFlow = displacers.length > 0
 
       // Wind direction: smoothly bias shimmer drift toward cursor position
       const fieldW    = field.cols * CELL_W
@@ -357,21 +439,29 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
           const cellCx = baseWx + CELL_W * 0.5
           const cellCy = baseWy + CELL_H * 0.5
 
-          // Clearance — suppress field cells that fall inside a creature blob
-          let inClearance = false
+          // Clearance — suppress field cells inside a creature blob.
+          // Also track closest blob edge distance for cursor-wave attenuation.
+          let inClearance    = false
+          let closestBlobDist = Infinity
           for (const c of visCreatures) {
             const lx = cellCx - c.x, ly = cellCy - c.y
             const gm = glyphMasks[c.slug]
             if (gm) {
-              if (Math.abs(lx) <= gm.totalHalfW && Math.abs(ly) <= gm.totalHalfH) {
+              const inBox = Math.abs(lx) <= gm.totalHalfW && Math.abs(ly) <= gm.totalHalfH
+              if (inBox) {
                 const mx = Math.min(gm.width  - 1, Math.round((lx + gm.totalHalfW) * GLYPH_MASK_SCALE))
                 const my = Math.min(gm.height - 1, Math.round((ly + gm.totalHalfH) * GLYPH_MASK_SCALE))
                 if (gm.data[my * gm.width + mx]) { inClearance = true; break }
               }
+              const bd = Math.max(0, Math.max(Math.abs(lx) - gm.totalHalfW, Math.abs(ly) - gm.totalHalfH))
+              if (bd < closestBlobDist) closestBlobDist = bd
             } else {
               const dim = nameBlobDims[c.slug]
-              if (dim && Math.abs(lx) < dim.halfW + GLYPH_MASK_MARGIN && Math.abs(ly) < dim.halfH + GLYPH_MASK_MARGIN) {
-                inClearance = true; break
+              if (dim) {
+                const hw = dim.halfW + GLYPH_MASK_MARGIN, hh = dim.halfH + GLYPH_MASK_MARGIN
+                if (Math.abs(lx) < hw && Math.abs(ly) < hh) { inClearance = true; break }
+                const bd = Math.max(0, Math.max(Math.abs(lx) - hw, Math.abs(ly) - hh))
+                if (bd < closestBlobDist) closestBlobDist = bd
               }
             }
           }
@@ -382,6 +472,16 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
             const { dx, dy } = doubletDisplacement(baseWx, baseWy, displacers, t, CELL_H)
             drawX += dx
             drawY += dy
+          }
+
+          // Cursor wave — soft radial rings, attenuated near blob edges
+          if (cursor._intensity > 0.01) {
+            const EXCL    = POND_PHYSICS.cursor.waveExclusionPx
+            const waveAtt = closestBlobDist === Infinity ? 1 : Math.min(1, closestBlobDist / EXCL)
+            if (waveAtt > 0.01) {
+              const w = cursorWave(baseWx, baseWy, cursor.x, cursor.y, cursor._intensity, cursor.vx, cursor.vy, t)
+              if (w) { drawX += w.dx * waveAtt; drawY += w.dy * waveAtt }
+            }
           }
 
           const sb    = reg === 1
@@ -406,7 +506,6 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
         ctx.font         = `${CELL_H}px ui-monospace, 'Courier New', Courier, monospace`
         ctx.textBaseline = 'middle'
         ctx.textAlign    = 'center'
-        // Outline stroke width: ~1px in screen space
         ctx.lineWidth    = 1.0 / zoom
 
         for (const c of creatures) {
@@ -433,12 +532,10 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
             c._pulse = { cell: -1, startT: -999, cooldown: 0.5 + Math.random() * 2 }
           }
 
-          // Breathing — shared opacity oscillation
           const breathFreq = hp > 0.05 ? 0.30 : 0.15
           const breathe    = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * breathFreq + c._blobPhase)
           const baseAlpha  = 0.45 + 0.20 * breathe
 
-          // Pulse — one cell brightens periodically
           c._pulse.cooldown -= dt
           if (c._pulse.cooldown <= 0) {
             c._pulse.cell     = Math.floor(Math.random() * cells.length)
@@ -446,21 +543,15 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
             c._pulse.cooldown = (hp > 0.05 ? 0.75 : 3.0) * (0.7 + Math.random() * 0.6)
           }
 
-          const color        = colorForStatus(c.project.status)
-          ctx.fillStyle      = color
-          ctx.strokeStyle    = color
+          const color     = colorForStatus(c.project.status)
+          ctx.fillStyle   = color
+          ctx.strokeStyle = color
 
-          // Reveal blur: starts at 6px as letters appear, dissolves to 0 at full reveal.
-          // Set once per creature — same revealFactor applies to every cell.
           const revealBlurPx = revealFactor > 0.005 ? Math.max(0, (1 - revealFactor) * 6) : 0
-
-          // Cache per-cell positions so we can draw blocks first, then reveal chars
-          // with blur in a second pass (avoids toggling ctx.filter inside a tight loop).
-          const cellCache = []
+          const cellCache    = []
 
           for (let ci = 0; ci < cells.length; ci++) {
-            const cell     = cells[ci]
-            // Drift in sync with water shimmer — sample the same wind-advected fbm field
+            const cell       = cells[ci]
             const edgeDist   = Math.min(cell.charIdx, cell.wordLen - 1 - cell.charIdx)
             const edgeFactor = Math.min(1, edgeDist / 1.5)
             const cellWX     = glyphX + cell.homeX
@@ -481,15 +572,12 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
             const px = glyphX + cell.homeX + jx
             const py = glyphY + cell.homeY + jy
 
-            // blockAlpha: shared by outline + fill layers, both fade out as letters reveal
             const blockAlpha = cellAlpha * (1 - revealFactor)
 
-            // Outline █ — visible at low zoom, fades out as fill increases
             if (blockAlpha > 0.005 && fillFactor < 0.995) {
               ctx.globalAlpha = blockAlpha * (1 - fillFactor)
               ctx.strokeText('█', px, py)
             }
-            // Filled █ — fades in as zoom increases past OUTLINE_FILL_START
             if (blockAlpha > 0.005 && fillFactor > 0.005) {
               ctx.globalAlpha = blockAlpha * fillFactor
               ctx.fillText('█', px, py)
@@ -498,7 +586,6 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
             if (revealFactor > 0.005) cellCache.push({ px, py, cellAlpha, revealChar: cell.revealChar })
           }
 
-          // Second pass: reveal characters with blur applied once for the whole creature
           if (cellCache.length) {
             if (revealBlurPx > 0.1) ctx.filter = `blur(${revealBlurPx.toFixed(1)}px)`
             for (const { px, py, cellAlpha, revealChar } of cellCache) {
@@ -520,44 +607,47 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
     return () => { cancelAnimationFrame(rafId); ro.disconnect() }
   }, [field, creaturesRef])
 
+  // ── Hit-test helper (shared by mouse + touch handlers) ─────────────────
+  function hitCreature(worldX, worldY) {
+    const cs = creaturesRef ? creaturesRef.current : []
+    for (const c of cs) {
+      const dim = nameBlobDims[c.slug]
+      const hw  = dim ? dim.halfW + GLYPH_MASK_MARGIN : 20
+      const hh  = dim ? dim.halfH + GLYPH_MASK_MARGIN : 12
+      if (Math.abs(worldX - c.x) <= hw && Math.abs(worldY - c.y) <= hh) return c
+    }
+    return null
+  }
+
+  function worldFromEvent(clientX, clientY) {
+    const { x: panX, y: panY, zoom } = usePondStore.getState().camera
+    return { worldX: (clientX - panX) / zoom, worldY: (clientY - panY) / zoom }
+  }
+
+  // ── Mouse handlers ───────────────────────────────────────────────────────
+
   function handleMouseDown(e) {
     mouseDownPos.current = { x: e.clientX, y: e.clientY }
+    const { worldX, worldY } = worldFromEvent(e.clientX, e.clientY)
+    const c = hitCreature(worldX, worldY)
+    if (!c) return
 
-    const { x: panX, y: panY, zoom } = usePondStore.getState().camera
-    const worldX = (e.clientX - panX) / zoom
-    const worldY = (e.clientY - panY) / zoom
+    if (creatureDragRef) creatureDragRef.current = c
+    let lastDragX = e.clientX, lastDragY = e.clientY
 
-    const creatures = creaturesRef ? creaturesRef.current : []
-    for (const c of creatures) {
-      const rx = worldX - c.x, ry = worldY - c.y
-      const dim = nameBlobDims[c.slug]
-      const hw = dim ? dim.halfW + GLYPH_MASK_MARGIN : 20
-      const hh = dim ? dim.halfH + GLYPH_MASK_MARGIN : 12
-      if (Math.abs(rx) <= hw && Math.abs(ry) <= hh) {
-        if (creatureDragRef) creatureDragRef.current = c
-
-        let lastDragX = e.clientX
-        let lastDragY = e.clientY
-
-        function onDragMove(me) {
-          const { zoom: z } = usePondStore.getState().camera
-          c.homeX += (me.clientX - lastDragX) / z
-          c.homeY += (me.clientY - lastDragY) / z
-          lastDragX = me.clientX
-          lastDragY = me.clientY
-        }
-
-        function onDragUp() {
-          if (creatureDragRef) creatureDragRef.current = null
-          window.removeEventListener('mousemove', onDragMove)
-          window.removeEventListener('mouseup',   onDragUp)
-        }
-
-        window.addEventListener('mousemove', onDragMove)
-        window.addEventListener('mouseup',   onDragUp)
-        break
-      }
+    function onDragMove(me) {
+      const { zoom: z } = usePondStore.getState().camera
+      c.homeX += (me.clientX - lastDragX) / z
+      c.homeY += (me.clientY - lastDragY) / z
+      lastDragX = me.clientX; lastDragY = me.clientY
     }
+    function onDragUp() {
+      if (creatureDragRef) creatureDragRef.current = null
+      window.removeEventListener('mousemove', onDragMove)
+      window.removeEventListener('mouseup',   onDragUp)
+    }
+    window.addEventListener('mousemove', onDragMove)
+    window.addEventListener('mouseup',   onDragUp)
   }
 
   function handleClick(e) {
@@ -566,56 +656,74 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       const dy = e.clientY - mouseDownPos.current.y
       if (Math.sqrt(dx * dx + dy * dy) > 5) return
     }
-
-    const { x: panX, y: panY, zoom } = usePondStore.getState().camera
-    const worldX = (e.clientX - panX) / zoom
-    const worldY = (e.clientY - panY) / zoom
-
-    const creatures = creaturesRef ? creaturesRef.current : []
-    for (const c of creatures) {
-      const rx = worldX - c.x, ry = worldY - c.y
-      const dim = nameBlobDims[c.slug]
-      const hw = dim ? dim.halfW + GLYPH_MASK_MARGIN : 20
-      const hh = dim ? dim.halfH + GLYPH_MASK_MARGIN : 12
-      if (Math.abs(rx) <= hw && Math.abs(ry) <= hh) {
-        const p = c.project
-        usePondStore.getState().openProject({
-          slug:   p.slug,
-          name:   p.name,
-          status: p.status,
-          mode:   p.frame.mode,
-          target: p.frame.target,
-        })
-        return
-      }
+    const { worldX, worldY } = worldFromEvent(e.clientX, e.clientY)
+    const c = hitCreature(worldX, worldY)
+    if (c) {
+      const p = c.project
+      usePondStore.getState().openProject({ slug: p.slug, name: p.name, status: p.status, mode: p.frame.mode, target: p.frame.target })
+    } else {
+      // Tap/click on open water — ripple impulse
+      usePondStore.getState().injectTapRipple(worldX, worldY)
     }
   }
 
   function handleMouseMove(e) {
     if (creatureDragRef?.current) return
-    const { x: panX, y: panY, zoom } = usePondStore.getState().camera
-    const worldX = (e.clientX - panX) / zoom
-    const worldY = (e.clientY - panY) / zoom
-    const creatures = creaturesRef ? creaturesRef.current : []
-
-    let hitSlug = null
-    for (const c of creatures) {
-      const rx = worldX - c.x, ry = worldY - c.y
-      const dim = nameBlobDims[c.slug]
-      const hw = dim ? dim.halfW + GLYPH_MASK_MARGIN : 20
-      const hh = dim ? dim.halfH + GLYPH_MASK_MARGIN : 12
-      if (Math.abs(rx) <= hw && Math.abs(ry) <= hh) {
-        hitSlug = c.slug
-        break
-      }
-    }
-
-    hoveredSlugRef.current = hitSlug
-    e.currentTarget.style.cursor = hitSlug ? 'pointer' : ''
+    const { worldX, worldY } = worldFromEvent(e.clientX, e.clientY)
+    const c = hitCreature(worldX, worldY)
+    hoveredSlugRef.current = c ? c.slug : null
+    e.currentTarget.style.cursor = c ? 'pointer' : ''
   }
 
   function handleMouseLeave() {
     hoveredSlugRef.current = null
+  }
+
+  // ── Touch handlers (long-press hover; tap and drag handled by useCamera) ─
+
+  function handleTouchStart(e) {
+    const touch = e.touches[0]
+    if (!touch) return
+    longPressTouch.current = { x: touch.clientX, y: touch.clientY }
+    longPressSlug.current  = null
+
+    const { worldX, worldY } = worldFromEvent(touch.clientX, touch.clientY)
+    const c = hitCreature(worldX, worldY)
+    if (!c) return
+
+    if (longPressTimer.current) clearTimeout(longPressTimer.current)
+    longPressTimer.current = setTimeout(() => {
+      hoveredSlugRef.current = c.slug
+      longPressSlug.current  = c.slug
+      longPressTimer.current = null
+    }, POND_PHYSICS.mobile.longPressMs)
+  }
+
+  function handleTouchMove(e) {
+    if (!longPressTimer.current) return
+    const touch = e.touches[0]
+    const start = longPressTouch.current
+    if (!touch || !start) return
+    const dx = touch.clientX - start.x, dy = touch.clientY - start.y
+    if (Math.sqrt(dx * dx + dy * dy) > POND_PHYSICS.mobile.tapMoveThreshold) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+
+  function handleTouchEnd() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    // Auto-clear long-press hover after hold window expires
+    const slug = longPressSlug.current
+    if (slug) {
+      setTimeout(() => {
+        if (hoveredSlugRef.current === slug) hoveredSlugRef.current = null
+      }, POND_PHYSICS.mobile.longPressHoldMs)
+      longPressSlug.current = null
+    }
   }
 
   return (
@@ -625,6 +733,9 @@ export default function AsciiField({ field, creaturesRef, creatureDragRef }) {
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       style={{ position: 'absolute', inset: 0, display: 'block' }}
     />
   )

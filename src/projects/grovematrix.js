@@ -6,6 +6,13 @@ export default {
   home: { x: 0.42, y: 0.56 },
   glyph: {
     ascii: '∷',
+    outline: [
+      '██ ██',
+      '█████',
+      ' ███ ',
+      '█████',
+      '██ ██',
+    ],
   },
   behavior: {
     bobAmplitude: 4,

@@ -4,20 +4,19 @@ import useMurmurStore from '@/murmur/store/useMurmurStore.js'
 import { audioEngine } from '@/murmur/audio/AudioEngine.js'
 import { useSEO } from '@/lib/useSEO.js'
 import PointCloudScene from './scene/PointCloudScene.jsx'
-import ModeToggle from './ui/ModeToggle.jsx'
-import Transport from './ui/Transport.jsx'
-import AudioUpload from './ui/AudioUpload.jsx'
+import SourceToggle from './ui/SourceToggle.jsx'
+import SourcePanel from './ui/SourcePanel.jsx'
 import SculptHUD from './ui/SculptHUD.jsx'
-import CloudPicker from './ui/CloudPicker.jsx'
 import KeyboardHelper from './ui/KeyboardHelper.jsx'
 import MappingsPanel from './ui/MappingsPanel.jsx'
 import ChordPicker from './ui/ChordPicker.jsx'
+import FxPanel from './ui/FxPanel.jsx'
 import './murmur.css'
 
 // Mode-default camera positions
 const CAM = {
-  sculpt:   { x: 2.2, y: 1.0, z: 2.2 },
-  reactive: { x: 2.0, y: 1.5, z: 2.5 },
+  interactive: { x: 2.2, y: 1.0, z: 2.2 },
+  playback:    { x: 2.0, y: 1.5, z: 2.5 },
 }
 
 export default function Murmur() {
@@ -43,6 +42,8 @@ export default function Murmur() {
   const [vignetteActive, setVignetteActive] = useState(false)
   const [noticeText, setNoticeText]         = useState(null)
   const [exiting, setExiting]               = useState(false)
+  const [spatialHint, setSpatialHint]       = useState(false)
+  const spatialHintTimer = useRef(null)
 
   // Navigate back to pond — fade visual + audio, save session state, then route
   const navigateToPond = useCallback(async () => {
@@ -54,14 +55,14 @@ export default function Murmur() {
       }
     } catch (_) {}
 
-    setExiting(true)  // kick off CSS opacity fade
+    setExiting(true)
 
     if (audioEngine.isAnyAudioActive) audioEngine.fadeOut(0.3)
 
-    await new Promise(r => setTimeout(r, 340))  // wait for fade to complete
+    await new Promise(r => setTimeout(r, 340))
 
-    audioEngine.stopAll()      // stop all players while master is still faded
-    audioEngine.fadeIn(0.001)  // reset volume for next visit
+    audioEngine.stopAll()
+    audioEngine.fadeIn(0.001)
     navigate('/')
   }, [navigate])
 
@@ -79,10 +80,10 @@ export default function Murmur() {
 
   // Restore session state from previous visit and reset volume
   useEffect(() => {
-    audioEngine.fadeIn(0.001)  // reset in case previous exit left volume faded
+    audioEngine.fadeIn(0.001)
     try {
       const savedMode = sessionStorage.getItem('murmur_mode')
-      if (savedMode === 'reactive' || savedMode === 'sculpt') {
+      if (savedMode === 'playback' || savedMode === 'interactive') {
         useMurmurStore.getState().setMode(savedMode)
       }
       const savedParams = sessionStorage.getItem('murmur_sculpt_params')
@@ -115,7 +116,18 @@ export default function Murmur() {
     return () => document.removeEventListener('visibilitychange', handler)
   }, [])
 
-  // Mode-switch choreography
+  // One-time headphone hint on first load
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('murmur-spatial-hint-v1')) return
+      localStorage.setItem('murmur-spatial-hint-v1', '1')
+    } catch (_) {}
+    setSpatialHint(true)
+    spatialHintTimer.current = setTimeout(() => setSpatialHint(false), 8000)
+    return () => clearTimeout(spatialHintTimer.current)
+  }, [])
+
+  // Mode-switch choreography: audio chain swap + camera lerp + vignette flash
   useEffect(() => {
     if (firstMount.current) { firstMount.current = false; return }
     if (!audioEngine.isReady) return
@@ -124,35 +136,28 @@ export default function Murmur() {
     clearTimeout(vignetteTimer.current)
     clearTimeout(camTimer.current)
 
-    // Reset grain freeze on every mode change
     setGrainFrozen(false)
-
-    // 0ms: vignette darkens edges (CSS animation handles 0→peak→0)
     setVignetteActive(true)
 
-    // 80ms: begin audio fade-out over 200ms
     swapTimer.current = setTimeout(() => {
       audioEngine.fadeOut(0.2)
 
-      // 160ms (80+80): swap chains at fade midpoint, then fade back in
       setTimeout(() => {
-        if (mode === 'sculpt') {
-          audioEngine.detachReactiveChain()
-          audioEngine.attachSculptChain()
+        if (mode === 'interactive') {
+          audioEngine.detachPlaybackChain()
+          audioEngine.attachInteractiveChain()
         } else {
-          audioEngine.detachSculptChain()
-          audioEngine.attachReactiveChain()
+          audioEngine.detachInteractiveChain()
+          audioEngine.attachPlaybackChain()
         }
         audioEngine.fadeIn(0.2)
       }, 80)
     }, 80)
 
-    // 200ms: ease camera toward mode-default position
     camTimer.current = setTimeout(() => {
       setCameraTarget(CAM[mode])
     }, 200)
 
-    // 700ms: remove vignette element (CSS animation is complete)
     vignetteTimer.current = setTimeout(() => setVignetteActive(false), 700)
 
     return () => {
@@ -188,10 +193,8 @@ export default function Murmur() {
           ✕
         </button>
       </div>
-      <CloudPicker />
-
-      {/* Top-center: mode toggle */}
-      {cloud && <ModeToggle />}
+      {/* Top-center: playback / interactive source toggle */}
+      {cloud && <SourceToggle />}
 
       {/* Loading / error / idle placeholder */}
       {cloudLoading && (
@@ -211,24 +214,26 @@ export default function Murmur() {
         </div>
       )}
 
-      {/* Full-bleed 3-D scene — keep mounted once initial cloud is ready; cloud swaps are handled inside PointCloud via useMemo */}
+      {/* Full-bleed 3-D scene — always sculpt visual frame */}
       {cloud && <PointCloudScene />}
 
-      {/* Bottom-center: transport + upload — stacked in a flex column so they never overlap */}
-      {cloud && (
-        <div className="murmur-bottom-center">
-          <Transport />
-          <AudioUpload />
-        </div>
-      )}
+      {/* Bottom-center: unified source panel (audio + cloud + transport) */}
+      <SourcePanel />
 
-      {/* Bottom-right: sculpt HUD */}
+      {/* Bottom-right: sculpt HUD — both modes */}
       {cloud && <SculptHUD />}
 
       {/* Decimation notice */}
       {noticeText && (
         <div className="murmur-notice" role="status">
           {noticeText}
+        </div>
+      )}
+
+      {/* One-time headphone hint */}
+      {spatialHint && (
+        <div className="murmur-notice murmur-notice--hint" role="status" aria-live="polite">
+          headphones recommended — spatial audio is on
         </div>
       )}
 
@@ -281,11 +286,12 @@ export default function Murmur() {
         </>
       )}
 
-      {/* Left-side panel stack: mappings (reactive only) + chord picker (both modes) */}
+      {/* Left-side panel stack: mappings (interactive only) + chord (both) + fx (both) */}
       {cloud && (
         <div className="murmur-left-panels">
-          {mode === 'reactive' && <MappingsPanel />}
+          {mode === 'interactive' && <MappingsPanel />}
           <ChordPicker />
+          <FxPanel />
         </div>
       )}
 

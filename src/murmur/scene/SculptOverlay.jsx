@@ -44,9 +44,9 @@ export default function SculptOverlay() {
   const matRefs   = useRef([])
   const autoTimer = useRef(null)
 
-  // Auto-show boxes on first sculpt entry, fade after 5s
+  // Auto-show boxes on first entry to interactive mode, fade after 5s
   useEffect(() => {
-    if (mode === 'sculpt' && !hasSculptedBefore) {
+    if (mode === 'interactive' && !hasSculptedBefore) {
       hasSculptedBefore = true
       useMurmurStore.getState().setShowGroupGrid(true)
       clearTimeout(autoTimer.current)
@@ -62,7 +62,7 @@ export default function SculptOverlay() {
   // Animate each box's opacity toward its resonance-driven target
   useFrame(() => {
     const isVisible = useMurmurStore.getState().showGroupGrid
-    if (!isVisible || mode !== 'sculpt') {
+    if (!isVisible) {
       matRefs.current.forEach(mat => {
         if (mat) mat.opacity = Math.max(0, mat.opacity - 0.04)
       })

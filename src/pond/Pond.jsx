@@ -9,6 +9,8 @@ import usePondStore from '@/store/usePondStore.js'
 import projects from '@/projects/_manifest.js'
 import '@/pond/pond.css'
 
+const IS_TOUCH = window.matchMedia('(hover: none) and (pointer: coarse)').matches
+
 export default function Pond() {
   // Deep-link: ?project=slug opens a project on load
   useEffect(() => {
@@ -37,7 +39,11 @@ export default function Pond() {
       {error   && <CenteredNote error>{error.message} — run the bake tool first</CenteredNote>}
       {field   && <AsciiField field={field} creaturesRef={creaturesRef} creatureDragRef={creatureDragRef} />}
       <CameraControls />
-      <div className="hint-bar">scroll to zoom · drag to pan</div>
+      <div className="hint-bar">
+        {IS_TOUCH
+          ? 'pinch to zoom · drag to pan · tap creatures to open'
+          : 'scroll to zoom · drag to pan'}
+      </div>
       {import.meta.env.DEV && (
         <a href="/tools/bake-aerial/index.html" target="_blank" rel="noreferrer" className="dev-bake-btn">
           bake

@@ -4,12 +4,19 @@ import * as THREE from 'three'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { fxSettings } from './fxSettings.js'
 
 const DitherBleedShader = {
   uniforms: {
     tDiffuse:        { value: null },
     uResolution:     { value: new THREE.Vector2(1, 1) },
     uDitherStrength: { value: 0.38 },
+    uLevels:         { value: 5.0 },
+    uNoiseStrength:  { value: 0.30 },
+    uMonochrome:     { value: 0.85 },
+    uBleedRadius:    { value: 4.0 },
+    uBleedThreshold: { value: 0.40 },
+    uSaturationBoost:{ value: 0.60 },
     uBleedStrength:  { value: 0.12 },
   },
 
@@ -25,9 +32,18 @@ const DitherBleedShader = {
     uniform sampler2D tDiffuse;
     uniform vec2      uResolution;
     uniform float     uDitherStrength;
+    uniform float     uLevels;
+    uniform float     uNoiseStrength;
+    uniform float     uMonochrome;
+    uniform float     uBleedRadius;
+    uniform float     uBleedThreshold;
+    uniform float     uSaturationBoost;
     uniform float     uBleedStrength;
-    varying vec2 vUv;
+    varying vec2      vUv;
 
+    float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+
+    // 4×4 Bayer ordered threshold matrix
     float bayerThreshold(float px, float py) {
       int x   = int(mod(px, 4.0));
       int y   = int(mod(py, 4.0));
@@ -50,36 +66,65 @@ const DitherBleedShader = {
       return 5.0 / 16.0;
     }
 
-    float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+    // Per-pixel hash for noise jitter — breaks up Bayer regularity
+    float hash21(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+
+    // Saturation boost — mix toward chroma away from grey
+    vec3 boostSat(vec3 c, float amount) {
+      return clamp(mix(vec3(lum(c)), c, 1.0 + amount), 0.0, 1.0);
+    }
+
+    // Accumulate one bleed tap: sample at dir*radius, weight by luminance above threshold
+    void accumTap(vec2 dir, vec2 texel, inout vec3 acc, inout float w) {
+      vec3  s = texture2D(tDiffuse, vUv + dir * uBleedRadius * texel).rgb;
+      float l = lum(s);
+      if (l > uBleedThreshold) { acc += s * l; w += l; }
+    }
 
     void main() {
       vec2 texel = 1.0 / uResolution;
-      vec4 color = texture2D(tDiffuse, vUv);
+      vec4 orig  = texture2D(tDiffuse, vUv);
 
-      // Ink bleed: 5x5 luminance-weighted neighborhood diffusion
-      vec3  bleed  = vec3(0.0);
-      float totalW = 0.0;
-      for (int dy = -2; dy <= 2; dy++) {
-        for (int dx = -2; dx <= 2; dx++) {
-          if (dx == 0 && dy == 0) continue;
-          vec2  off  = vec2(float(dx), float(dy));
-          float d2   = dot(off, off);
-          vec4  s    = texture2D(tDiffuse, vUv + off * texel);
-          float w    = lum(s.rgb) * exp(-d2 / 6.0);
-          bleed  += s.rgb * w;
-          totalW += w;
-        }
-      }
-      vec3 bled = totalW > 0.0 ? mix(color.rgb, bleed / totalW, uBleedStrength) : color.rgb;
+      // ── 8-tap radial ink bleed ────────────────────────────────────────────
+      vec3  bleedAcc = vec3(0.0);
+      float bleedW   = 0.0;
+      accumTap(vec2( 1.000,  0.000), texel, bleedAcc, bleedW);
+      accumTap(vec2( 0.707,  0.707), texel, bleedAcc, bleedW);
+      accumTap(vec2( 0.000,  1.000), texel, bleedAcc, bleedW);
+      accumTap(vec2(-0.707,  0.707), texel, bleedAcc, bleedW);
+      accumTap(vec2(-1.000,  0.000), texel, bleedAcc, bleedW);
+      accumTap(vec2(-0.707, -0.707), texel, bleedAcc, bleedW);
+      accumTap(vec2( 0.000, -1.000), texel, bleedAcc, bleedW);
+      accumTap(vec2( 0.707, -0.707), texel, bleedAcc, bleedW);
 
-      // Bayer ordered dithering — strongest on dark pixels
+      vec3 bled = bleedW > 0.0
+        ? mix(orig.rgb, bleedAcc / bleedW, uBleedStrength)
+        : orig.rgb;
+
+      // Saturation boost on the blended result
+      bled = boostSat(bled, uSaturationBoost);
+
+      // ── Paper / ink monochrome blend ──────────────────────────────────────
+      vec3 paper = vec3(0.0275, 0.0431, 0.0314);  // #070b08
+      vec3 ink   = vec3(0.8118, 0.8902, 0.8275);  // #cfe3d3
+      bled = mix(bled, mix(paper, ink, lum(bled)), uMonochrome);
+
+      // ── Bayer dither with per-pixel noise jitter ──────────────────────────
       float brightness = lum(bled);
       float darkMask   = 1.0 - smoothstep(0.0, 0.4, brightness);
       vec2  coord      = floor(vUv * uResolution);
-      float threshold  = bayerThreshold(coord.x, coord.y);
-      float dither     = (threshold - 0.5) * uDitherStrength * darkMask;
+      float bayer      = bayerThreshold(coord.x, coord.y);
+      float noise      = (hash21(coord) - 0.5) * uNoiseStrength;
+      float dither     = (bayer + noise - 0.5) * uDitherStrength * darkMask;
 
-      gl_FragColor = vec4(clamp(bled + dither, 0.0, 1.0), color.a);
+      // Quantize to uLevels steps in dark areas; leave bright particles untouched
+      vec3  withDither = clamp(bled + dither, 0.0, 1.0);
+      float steps      = max(1.0, uLevels - 1.0);
+      vec3  quantized  = floor(withDither * steps + 0.5) / steps;
+
+      gl_FragColor = vec4(mix(withDither, quantized, darkMask), orig.a);
     }
   `,
 }
@@ -115,7 +160,20 @@ export default function DitherBleed() {
     composerRef.current.composer.setSize(w, h)
   }, [size, gl])
 
-  useFrame(() => { composerRef.current?.composer.render() }, 1)
+  useFrame(() => {
+    const c = composerRef.current
+    if (!c) return
+    const u = c.pass.uniforms
+    u.uDitherStrength.value  = fxSettings.ditherStrength
+    u.uLevels.value          = fxSettings.levels
+    u.uNoiseStrength.value   = fxSettings.noiseStrength
+    u.uMonochrome.value      = fxSettings.monochrome
+    u.uBleedRadius.value     = fxSettings.bleedRadius
+    u.uBleedThreshold.value  = fxSettings.bleedThreshold
+    u.uSaturationBoost.value = fxSettings.saturationBoost
+    u.uBleedStrength.value   = fxSettings.bleedStrength
+    c.composer.render()
+  }, 1)
 
   return null
 }

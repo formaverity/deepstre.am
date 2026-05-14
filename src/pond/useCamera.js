@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react'
 import usePondStore from '@/store/usePondStore.js'
+import { POND_PHYSICS } from '@/pond/pondPhysics.js'
 
 export function useCamera(creatureDragRef = null) {
   const ref = useRef(null)
@@ -10,7 +11,9 @@ export function useCamera(creatureDragRef = null) {
 
     let dragging = false
     let lastX = 0, lastY = 0
-    let lastTouchDist = null
+    let lastTouchDist   = null
+    let touchDecayTimer = null
+    let touchStartPos   = null   // {x,y} screen — for tap detection
 
     const store = () => usePondStore.getState()
 
@@ -39,15 +42,12 @@ export function useCamera(creatureDragRef = null) {
       const rect = el.getBoundingClientRect()
       store().setMouse(e.clientX - rect.left, e.clientY - rect.top, true)
       if (!dragging) return
-      // Yield to creature drag — don't pan while a creature is being repositioned.
       if (creatureDragRef?.current) {
-        lastX = e.clientX
-        lastY = e.clientY
+        lastX = e.clientX; lastY = e.clientY
         return
       }
       store().panBy(e.clientX - lastX, e.clientY - lastY)
-      lastX = e.clientX
-      lastY = e.clientY
+      lastX = e.clientX; lastY = e.clientY
     }
 
     function onMouseUp() {
@@ -61,19 +61,33 @@ export function useCamera(creatureDragRef = null) {
       el.classList.remove('dragging')
     }
 
-    // ── Touch (pinch-zoom + single-finger pan) ───────────────────────────
+    // ── Touch (pinch-zoom + single-finger pan + cursor simulation) ───────
 
     function touchDist(a, b) {
       const dx = a.clientX - b.clientX, dy = a.clientY - b.clientY
       return Math.sqrt(dx * dx + dy * dy)
     }
 
+    function scheduleTouchDecay() {
+      if (touchDecayTimer) clearTimeout(touchDecayTimer)
+      touchDecayTimer = setTimeout(() => {
+        store().setMouse(0, 0, false)
+        touchDecayTimer = null
+      }, POND_PHYSICS.cursor.mobileDecayMs)
+    }
+
     function onTouchStart(e) {
+      if (touchDecayTimer) { clearTimeout(touchDecayTimer); touchDecayTimer = null }
+
       if (e.touches.length === 2) {
         lastTouchDist = touchDist(e.touches[0], e.touches[1])
       } else {
         lastX = e.touches[0].clientX
         lastY = e.touches[0].clientY
+        touchStartPos = { x: lastX, y: lastY }
+        // Treat as cursor entering so the doublet is live immediately
+        const rect = el.getBoundingClientRect()
+        store().setMouse(lastX - rect.left, lastY - rect.top, true)
       }
     }
 
@@ -90,14 +104,22 @@ export function useCamera(creatureDragRef = null) {
         }
         lastTouchDist = dist
       } else {
-        store().panBy(e.touches[0].clientX - lastX, e.touches[0].clientY - lastY)
-        lastX = e.touches[0].clientX
-        lastY = e.touches[0].clientY
+        const touch = e.touches[0]
+        const rect  = el.getBoundingClientRect()
+        // Mirror touch position as the cursor doublet origin
+        store().setMouse(touch.clientX - rect.left, touch.clientY - rect.top, true)
+        // Pan
+        store().panBy(touch.clientX - lastX, touch.clientY - lastY)
+        lastX = touch.clientX; lastY = touch.clientY
+        touchStartPos = null  // moved — not a tap
       }
     }
 
     function onTouchEnd(e) {
       if (e.touches.length < 2) lastTouchDist = null
+      // Begin gradual cursor decay — intensity fades naturally via idle state machine
+      scheduleTouchDecay()
+      touchStartPos = null
     }
 
     // ── Bind ─────────────────────────────────────────────────────────────
@@ -120,6 +142,7 @@ export function useCamera(creatureDragRef = null) {
       el.removeEventListener('touchend',   onTouchEnd)
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup',   onMouseUp)
+      if (touchDecayTimer) clearTimeout(touchDecayTimer)
     }
   }, [])
 
