@@ -114,10 +114,12 @@ const DitherBleedShader = {
       // ── Bayer dither with per-pixel noise jitter ──────────────────────────
       float brightness = lum(bled);
       float darkMask   = 1.0 - smoothstep(0.0, 0.4, brightness);
+      // Only dither pixels with actual model content — skip near-black background
+      float contentMask = smoothstep(0.03, 0.09, brightness);
       vec2  coord      = floor(vUv * uResolution);
       float bayer      = bayerThreshold(coord.x, coord.y);
       float noise      = (hash21(coord) - 0.5) * uNoiseStrength;
-      float dither     = (bayer + noise - 0.5) * uDitherStrength * darkMask;
+      float dither     = (bayer + noise - 0.5) * uDitherStrength * darkMask * contentMask;
 
       // Quantize to uLevels steps in dark areas; leave bright particles untouched
       vec3  withDither = clamp(bled + dither, 0.0, 1.0);

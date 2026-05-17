@@ -68,3 +68,164 @@
 .page-link:hover {
   color: rgba(159, 225, 203, 0.7);
 }
+
+/* ── Biointranet reader ───────────────────────────────────────────────── */
+
+.bio-root {
+  width: 100vw;
+  min-height: 100dvh;
+  background: #0d1410;
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  position: relative;
+}
+
+/* Fixed nav — stays at top while feed scrolls */
+.bio-nav {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: rgba(200, 213, 192, 0.28);
+  display: flex;
+  align-items: center;
+  z-index: 10;
+  background: rgba(13, 20, 16, 0.7);
+  backdrop-filter: blur(6px);
+  padding: 0.2rem 0.5rem;
+}
+
+.bio-close {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 10;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 0.5px solid rgba(200, 213, 192, 0.18);
+  border-radius: 4px;
+  color: rgba(200, 213, 192, 0.35);
+  font-family: ui-monospace, 'Courier New', Courier, monospace;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.bio-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(200, 213, 192, 0.4);
+  color: rgba(200, 213, 192, 0.65);
+}
+
+.bio-feed {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 4.5rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.bio-status {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(200, 213, 192, 0.22);
+  text-align: center;
+  padding: 4rem 0;
+  margin: 0;
+}
+
+.bio-status--error {
+  color: rgba(224, 160, 160, 0.5);
+}
+
+/* Project header: title + meta lines */
+.bio-header {
+  padding-bottom: 1.5rem;
+  border-bottom: 0.5px solid rgba(200, 213, 192, 0.07);
+}
+
+.bio-header-title {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(200, 213, 192, 0.65);
+  margin: 0 0 0.65rem;
+}
+
+.bio-header-line {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  line-height: 1.6;
+  color: rgba(200, 213, 192, 0.35);
+  margin: 0.18rem 0 0;
+}
+
+/* Uncaptioned images — 3-column grid */
+.bio-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+}
+
+.bio-gallery-img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+  filter: contrast(1.03);
+}
+
+/* Captioned image highlight — full width */
+.bio-highlight {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.bio-img {
+  width: 100%;
+  display: block;
+  filter: contrast(1.03);
+}
+
+.bio-caption {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  line-height: 1.65;
+  color: rgba(200, 213, 192, 0.38);
+  margin: 0;
+}
+
+/* Text body — paragraphs stacked */
+.bio-text-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.bio-text {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 1.78;
+  color: rgba(200, 213, 192, 0.52);
+  margin: 0;
+}
+
+@media (max-width: 639px) {
+  .bio-feed {
+    padding: 4rem 1rem 3rem;
+    gap: 2.5rem;
+  }
+
+  .bio-gallery {
+    gap: 0.25rem;
+  }
+}

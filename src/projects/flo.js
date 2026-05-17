@@ -21,6 +21,6 @@ export default {
   },
   frame: {
     mode: 'iframe',
-    target: 'https://flo-app-silk.vercel.app',
+    target: 'https://www.wtflo.io',
   },
 }

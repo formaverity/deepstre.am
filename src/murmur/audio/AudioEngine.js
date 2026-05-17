@@ -73,6 +73,11 @@ class AudioEngine {
       arrayBuffer = await input.arrayBuffer()
     } else if (input instanceof ArrayBuffer) {
       arrayBuffer = input
+    } else if (typeof input === 'string') {
+      name = decodeURIComponent(input.split('/').pop()).replace(/\.[^.]+$/, '').replace(/_/g, ' ')
+      const resp = await fetch(input)
+      if (!resp.ok) throw new Error(`fetch failed: ${resp.status}`)
+      arrayBuffer = await resp.arrayBuffer()
     } else {
       throw new Error('loadBuffer: unsupported input type')
     }
