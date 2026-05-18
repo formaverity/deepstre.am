@@ -25,8 +25,7 @@ export default function SpatialPanner() {
 
   useFrame(() => {
     const state   = useMurmurStore.getState()
-    const mode    = state.mode
-    const enabled = state.spatialEnabled[mode] ?? false
+    const enabled = state.spatialEnabled ?? true
     const target  = enabled ? 0.05 : 0
 
     opacRef.current += (target - opacRef.current) * 0.08

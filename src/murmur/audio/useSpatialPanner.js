@@ -14,8 +14,7 @@ export function useSpatialPanner() {
     const camPos  = state.cameraState?.position
     if (!camPos) return
 
-    const mode    = state.mode
-    const enabled = state.spatialEnabled[mode] ?? false
+    const enabled = state.spatialEnabled ?? true
 
     const px = camPos.x
     const py = camPos.y

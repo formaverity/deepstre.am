@@ -1,0 +1,8 @@
+[
+  { "id": "pond-1021",  "name": "Pond 10/21",  "file": "/clouds/POND ALBUM/01_Pond_1021.mp3" },
+  { "id": "radiators",  "name": "Radiators",   "file": "/clouds/POND ALBUM/02_Radiators.mp3" },
+  { "id": "hum",        "name": "Hum",         "file": "/clouds/POND ALBUM/03_Hum.mp3" },
+  { "id": "lenfant",    "name": "L'Enfant",    "file": "/clouds/POND ALBUM/04_Lenfant.mp3" },
+  { "id": "canarium",   "name": "Canarium",    "file": "/clouds/POND ALBUM/05_Canarium.mp3" },
+  { "id": "opal",       "name": "Opal",        "file": "/clouds/POND ALBUM/05_Opal.mp3" }
+]

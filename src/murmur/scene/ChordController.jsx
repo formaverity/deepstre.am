@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import useMurmurStore from '@/murmur/store/useMurmurStore.js'
 import { audioEngine } from '@/murmur/audio/AudioEngine.js'
 import { COLOR_MAPPING } from '@/murmur/audio/GranularSculptor.jsx'
-import { resolveIntervals } from '@/murmur/audio/chordVoicings.js'
+import { chordEngine } from '@/murmur/audio/chordEngine.js'
 
 const CHORD_DELAY_MS = 80
 const NAV_THRESHOLD  = 5     // px — beyond this = navigation, abort chord
@@ -43,7 +43,6 @@ function buildGroupMask(groupAffinities, rootIdx, intervals) {
   return mask
 }
 
-// Sample the average RGB of a cloud group, desaturated for ink feel
 function sampleGroupColor(cloud, groupIdx) {
   const { positions, colors, count } = cloud
   if (!colors || !positions) return { r: 0.72, g: 0.80, b: 0.70 }
@@ -67,7 +66,6 @@ function sampleGroupColor(cloud, groupIdx) {
   const maxC = Math.max(rA, gA, bA)
   if (maxC < 0.01) return { r: 0.72, g: 0.80, b: 0.70 }
 
-  // Desaturate 35%
   const lum = 0.299 * rA + 0.587 * gA + 0.114 * bA
   const amt = 0.35
   return {
@@ -77,13 +75,8 @@ function sampleGroupColor(cloud, groupIdx) {
   }
 }
 
-// Merge all active pointer states into the chordParamsRef used by PointCloud for magnify
 function flushChordParams(store, pointerMap) {
-  let anyActive = false
-  let mask = 0
-  let maxMag = 0
-  let latestWorldPoint = null
-
+  let anyActive = false, mask = 0, maxMag = 0, latestWorldPoint = null
   for (const [, p] of pointerMap) {
     if (p.isChordActive) {
       anyActive = true
@@ -92,21 +85,13 @@ function flushChordParams(store, pointerMap) {
       latestWorldPoint = p.worldPoint
     }
   }
-
   store.chordParamsRef.current = {
-    active:        anyActive,
-    groupMask:     mask,
-    magnifyTarget: maxMag,
-    worldPoint:    latestWorldPoint,
+    active: anyActive, groupMask: mask, magnifyTarget: maxMag, worldPoint: latestWorldPoint,
   }
 }
 
-// ── Controller ────────────────────────────────────────────────────────────────
-
 export default function ChordController() {
   const { camera, gl } = useThree()
-
-  // Map<pointerId, { downX, downY, chordTimer, isChordActive, isNav, worldPoint, groupMask, smudgeId }>
   const pointers = useRef(new Map())
 
   useEffect(() => {
@@ -137,9 +122,9 @@ export default function ChordController() {
       const aff      = affs[groupIdx]
       const rootSt   = aff.octave * 12 + aff.pitchClass + COLOR_MAPPING.baseSemitone
 
-      const { chordConfig } = store
-      const intervals = resolveIntervals(chordConfig)
-      const voices    = Math.min(chordConfig.voices, intervals.length)
+      // Use algorithmic chord voicing from chordEngine
+      const intervals = chordEngine.getIntervals()
+      const voices    = chordEngine.voiceCount
       const groupMask = buildGroupMask(affs, groupIdx, intervals)
 
       const azimuth  = Math.atan2(worldPoint.x, worldPoint.z)
@@ -150,7 +135,6 @@ export default function ChordController() {
       p.isChordActive = true
       p.groupMask     = groupMask
 
-      // Spawn smudge
       const color    = sampleGroupColor(store.cloud, groupIdx)
       const seed     = ((pid * 9301 + Date.now()) * 49297) | 0
       const smudgeId = store.addSmudge({

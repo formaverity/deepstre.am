@@ -6,13 +6,13 @@ import useMurmurStore from '@/murmur/store/useMurmurStore.js'
 // Auto-show boxes on the first ever entry to sculpt mode, then auto-hide after 5s
 let hasSculptedBefore = false
 
-function GroupBox({ gx, gz, hue, matRef }) {
+function GroupBox({ gx, gz, hue, matRef, boxH, boxW, boxD }) {
   const geo = useMemo(() => {
-    const box   = new THREE.BoxGeometry(0.5, 3.0, 0.5)
+    const box   = new THREE.BoxGeometry(boxW, boxH, boxD)
     const edges = new THREE.EdgesGeometry(box)
     box.dispose()
     return edges
-  }, [])
+  }, [boxW, boxH, boxD])
   useEffect(() => () => geo.dispose(), [geo])
 
   const color = useMemo(
@@ -20,7 +20,7 @@ function GroupBox({ gx, gz, hue, matRef }) {
     [hue]
   )
 
-  // Cell center in normalized [-1,1] space
+  // Cell center in normalized [-1,1] space (matches group bin computation in loaders.js)
   const cx = gx * 0.5 - 0.75
   const cz = gz * 0.5 - 0.75
 
@@ -38,15 +38,15 @@ function GroupBox({ gx, gz, hue, matRef }) {
 }
 
 export default function SculptOverlay() {
-  const mode      = useMurmurStore(s => s.mode)
-  const showGrid  = useMurmurStore(s => s.showGroupGrid)
-  const cloud     = useMurmurStore(s => s.cloud)
-  const matRefs   = useRef([])
-  const autoTimer = useRef(null)
+  const gestureState = useMurmurStore(s => s.gestureState)
+  const showGrid     = useMurmurStore(s => s.showGroupGrid)
+  const cloud        = useMurmurStore(s => s.cloud)
+  const matRefs      = useRef([])
+  const autoTimer    = useRef(null)
 
-  // Auto-show boxes on first entry to interactive mode, fade after 5s
+  // Auto-show group grid on first touch, fade after 5s
   useEffect(() => {
-    if (mode === 'interactive' && !hasSculptedBefore) {
+    if (gestureState === 'touching' && !hasSculptedBefore) {
       hasSculptedBefore = true
       useMurmurStore.getState().setShowGroupGrid(true)
       clearTimeout(autoTimer.current)
@@ -57,7 +57,7 @@ export default function SculptOverlay() {
       }, 5000)
     }
     return () => clearTimeout(autoTimer.current)
-  }, [mode])
+  }, [gestureState])
 
   // Animate each box's opacity toward its resonance-driven target
   useFrame(() => {
@@ -81,6 +81,15 @@ export default function SculptOverlay() {
 
   if (!cloud?.groupAffinities) return null
 
+  // Derive box proportions from normalized cloud dimensions
+  const normInfo = cloud.normInfo
+  const boxH = normInfo
+    ? Math.max(0.3, normInfo.origSpan.y * normInfo.scale * 1.1)
+    : 2.2
+  // Cell width/depth: one quarter of the model's XZ normalized extents
+  const boxW = normInfo ? Math.max(0.15, normInfo.origSpan.x * normInfo.scale * 0.25) : 0.5
+  const boxD = normInfo ? Math.max(0.15, normInfo.origSpan.z * normInfo.scale * 0.25) : 0.5
+
   return (
     <group>
       {cloud.groupAffinities.map((aff, i) => {
@@ -93,6 +102,9 @@ export default function SculptOverlay() {
             gz={gz}
             hue={aff.pitchClass * 30}
             matRef={el => { matRefs.current[i] = el }}
+            boxH={boxH}
+            boxW={boxW}
+            boxD={boxD}
           />
         )
       })}

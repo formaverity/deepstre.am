@@ -8,10 +8,10 @@ export const FX_DEFAULTS = {
   levels:          5,
   noiseStrength:   0.30,
   monochrome:      0.85,
-  bleedRadius:     4.0,
+  bleedRadius:     2.0,
   bleedThreshold:  0.40,
   saturationBoost: 0.60,
-  bleedStrength:   0.12,
+  bleedStrength:   0.04,
 }
 
 function load() {

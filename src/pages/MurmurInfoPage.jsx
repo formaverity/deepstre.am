@@ -3,13 +3,21 @@ import { useSEO } from '@/lib/useSEO.js'
 import './pages.css'
 import './murmur-info.css'
 
-// Update this list whenever a new cloud is added to clouds/_manifest.js
+const POND_TRACKS = [
+  { num: '01', name: 'Pond 10/21' },
+  { num: '02', name: 'Radiators' },
+  { num: '03', name: 'Hum' },
+  { num: '04', name: "L'Enfant" },
+  { num: '05', name: 'Canarium' },
+  { num: '05', name: 'Opal' },
+]
+
 const BUNDLED_CLOUDS = [
   {
-    id:       'default-grove',
-    name:     'Default Grove',
-    place:    'Whitmore Lake, MI',
-    captured: '2026-03-14',
+    id:            'default-grove',
+    name:          'Default Grove',
+    place:         'Whitmore Lake, MI',
+    captured:      '2026-03-14',
     captured_with: 'iPhone 15 Pro / Polycam',
     description:
       'Five oaks at the western edge of the property, captured at golden hour. The understory is sparse this early in spring — you can hear it in how the canopy sits above empty air.',
@@ -19,7 +27,7 @@ const BUNDLED_CLOUDS = [
 export default function MurmurInfoPage() {
   useSEO({
     title:       'MURMUR — deepstre.am',
-    description: 'A point cloud audio instrument. LiDAR scans of real places, driven by whatever sound you bring.',
+    description: 'Spatial memories and a mini album, together in a generative granular instrument. POND by mosspcm, played through LiDAR scans of real places.',
     image:       'https://deepstre.am/og-murmur.png',
   })
 
@@ -36,22 +44,50 @@ export default function MurmurInfoPage() {
       <div className="mi-content">
         <header className="mi-header">
           <p className="mi-title">MURMUR</p>
-          <p className="mi-subtitle">point cloud audio instrument</p>
+          <p className="mi-subtitle">spatial memory · generative instrument</p>
         </header>
 
         {/* ── What is this ──────────────────────────────────────────── */}
         <section className="mi-section" aria-labelledby="what-heading">
           <h2 id="what-heading" className="mi-heading">what is this</h2>
           <p className="mi-body">
-            A LiDAR scan is a sampling of a place — every point in the cloud is a moment of light
-            returning to a sensor, a small act of measurement that says{' '}
-            <em>something was here.</em> An audio recording is the same thing, done differently:
-            a diaphragm displaced by air, translated to numbers, stored. Both are imperfect records
-            of a real moment in a real location. MURMUR is what happens when you cross them.
-            Load a scan of a grove. Load a field recording, a piece of music, whatever you brought.
-            The cloud responds to what plays through it — or you take the wheel and play the cloud
-            yourself. The instrument is the same either way. What changes is who is listening and who
-            is playing.
+            These are spatial memories: LiDAR scans of real outdoor places, each one a frozen moment
+            of space stored as a point cloud. And <em>POND</em> is a mini album I made as mosspcm —
+            loop-built, ecological. 808 bass and acoustic synthesis and field percussion.
+            Music that sounds like somewhere specific.
+          </p>
+          <p className="mi-body">
+            When they meet in MURMUR, the scan becomes the instrument. Your viewpoint is the
+            playhead — orbit the cloud and you're moving through the track; different regions of the
+            forest resonate with different pitches based on their color; distance shapes grain
+            density; tilt shifts pitch. Nothing plays the same way twice.
+          </p>
+          <p className="mi-body">
+            <em>An ecological DJ booth.</em>{' '}
+            The place and the music are inseparable here.
+          </p>
+        </section>
+
+        {/* ── The music ─────────────────────────────────────────────── */}
+        <section className="mi-section" aria-labelledby="music-heading">
+          <h2 id="music-heading" className="mi-heading">the music</h2>
+          <p className="mi-body mi-body--dim">
+            POND by mosspcm. Six tracks, all preloaded. Select one from the track picker
+            and press play — or touch the cloud to scrub through it directly in granular space.
+          </p>
+
+          <ul className="mi-track-list" aria-label="POND tracklist">
+            {POND_TRACKS.map((t, i) => (
+              <li key={i} className="mi-track">
+                <span className="mi-track-num">{t.num}</span>
+                <span className="mi-track-name">{t.name}</span>
+              </li>
+            ))}
+          </ul>
+
+          <p className="mi-body mi-body--dim">
+            You can also upload your own audio — any .mp3, .wav, or .flac — and run it
+            through any of the scans.
           </p>
         </section>
 
@@ -60,61 +96,65 @@ export default function MurmurInfoPage() {
           <h2 id="how-heading" className="mi-heading">how to play it</h2>
 
           <p className="mi-body">
-            MURMUR plays in two stances.
+            MURMUR has one mode and two stances. Press play to listen — the cloud responds to the
+            audio. Touch the cloud — orbit, drag, press and hold — and you're playing it: orbital
+            position scrubs through time, vertical tilt shifts pitch, distance shapes grain. The
+            transition is instant; the moment you let go, the audio resumes from where the orbit
+            left it.
+          </p>
+
+          <p className="mi-body">
+            Every pairing of scan and track composes itself: the spectral character of the audio
+            and the color distribution of the cloud together determine the resonance targets, chord
+            voicing, and visual response. Different scans with the same track produce different
+            compositions. The instrument is the relationship.
           </p>
 
           <div className="mi-mode-block">
-            <p className="mi-mode-name">playback</p>
-            <p className="mi-mode-desc">
-              Observational. Drop in an audio file and press play. The cloud listens. The spectral
-              content of what plays through it determines which spatial regions light up, based on
-              each region's color affinity — different clouds played with the same audio produce
-              different visual responses because the scans were taken at different times, in different
-              seasons, in different places. As you orbit the camera, the stereo image pans with you —
-              the cloud sounds like it is inside the headphones rather than behind them. Headphones
-              bring the binaural panning to life; speakers still work, just narrower. You watch the
-              audio play through the cloud.
-            </p>
+            <p className="mi-mode-name">listening</p>
             <ol className="mi-steps">
-              <li>Drop an audio file (or click the upload bar) to load it into the engine.</li>
-              <li>Press play or hit <kbd className="mi-key">space</kbd>. Regions of the cloud light up as the spectrum shifts.</li>
-              <li>Orbit to change the stereo pan. The cloud sounds different from different angles.</li>
-              <li>Press and hold anywhere on the cloud to layer a chord over the playing audio.</li>
+              <li>Select a track from the bottom bar — it loads into the instrument. Press play to start.</li>
+              <li>The cloud's color regions activate as the spectrum shifts — different zones respond to different frequencies.</li>
+              <li>Orbit the camera freely. The stereo image follows your position.</li>
+              <li>Press <kbd className="mi-key">space</kbd> to pause and resume.</li>
             </ol>
           </div>
 
           <div className="mi-mode-block">
-            <p className="mi-mode-name">interactive</p>
-            <p className="mi-mode-desc">
-              Causal. The same cloud, the same audio file — but now the camera is the player. The
-              granular engine reads from the file continuously; your position in space determines
-              where, how fast, and at what pitch. The instrument's geography becomes its harmony.
-            </p>
+            <p className="mi-mode-name">playing</p>
             <ol className="mi-steps">
-              <li>Load audio, then switch with the toggle at top or press <kbd className="mi-key">i</kbd>.</li>
-              <li><strong>Orbit</strong> (drag horizontally) — scrubs through the recording. A full orbit plays the whole file.</li>
-              <li><strong>Tilt</strong> (drag vertically) — changes playback rate. Looking at the ground slows and thickens the sound; looking up pitches it higher.</li>
-              <li><strong>Dolly</strong> (scroll or pinch) — controls grain size. Move in close for granular texture; pull back for long, phrase-length grains that blur into drones.</li>
-              <li><strong>Speed</strong> — how fast you orbit changes overlap density. Still camera is lush; fast sweeping creates stuttery fragmentation.</li>
-              <li>Press <kbd className="mi-key">space</kbd> to freeze the buffer position — the cloud keeps responding to your movement, but the recording stays put.</li>
-              <li>Press and hold anywhere on the cloud to sustain a chord whose root pitch is determined by where you pressed.</li>
+              <li>Touch (click and drag) the cloud to enter granular mode.</li>
+              <li><strong>Orbit</strong> — scrubs through the recording. One full orbit = one full pass through the audio.</li>
+              <li><strong>Tilt</strong> — looking down slows and deepens the sound; looking up pitches it higher.</li>
+              <li><strong>Distance</strong> — move close for fine granular texture; pull back for phrase-length grain.</li>
+              <li><strong>Speed</strong> — fast sweeping fragments the audio; holding still is dense and lush.</li>
+              <li>Release — playback resumes from exactly where the orbit left it.</li>
+            </ol>
+          </div>
+
+          <div className="mi-mode-block">
+            <p className="mi-mode-name">chord</p>
+            <ol className="mi-steps">
+              <li>Press and hold anywhere on the cloud. After a moment, a chord sustains from that point.</li>
+              <li>Drag while held — horizontal shifts filter cutoff; vertical shifts resonance.</li>
+              <li>Release — the chord fades over ~400ms.</li>
+              <li>Multiple touches: independent chord layers.</li>
             </ol>
           </div>
 
           <p className="mi-note">
-            Keyboard shortcuts: <kbd className="mi-key">p</kbd> playback &nbsp;·&nbsp;
-            <kbd className="mi-key">i</kbd> interactive &nbsp;·&nbsp;
-            <kbd className="mi-key">r</kbd> reset camera &nbsp;·&nbsp;
-            <kbd className="mi-key">?</kbd> full list
+            Keyboard: <kbd className="mi-key">space</kbd> play/pause &nbsp;·&nbsp;
+            <kbd className="mi-key">esc</kbd> close &nbsp;·&nbsp;
+            <kbd className="mi-key">i</kbd> toggle breadcrumb
           </p>
         </section>
 
-        {/* ── Site notes ────────────────────────────────────────────── */}
-        <section className="mi-section" aria-labelledby="clouds-heading">
-          <h2 id="clouds-heading" className="mi-heading">site notes</h2>
+        {/* ── The scans ─────────────────────────────────────────────── */}
+        <section className="mi-section" aria-labelledby="scans-heading">
+          <h2 id="scans-heading" className="mi-heading">the scans</h2>
           <p className="mi-body mi-body--dim">
-            These are the bundled clouds. Each one is a scan of a specific place at a specific
-            moment. They are not backdrop assets. They are records.
+            LiDAR captures of specific outdoor places at specific moments. Not backdrop assets —
+            spatial records. More are coming.
           </p>
 
           <ul className="mi-cloud-list">
@@ -131,6 +171,10 @@ export default function MurmurInfoPage() {
               </li>
             ))}
           </ul>
+
+          <p className="mi-body mi-body--dim">
+            Upload your own .ply file to bring a different place into the instrument.
+          </p>
         </section>
 
         <footer className="mi-footer">

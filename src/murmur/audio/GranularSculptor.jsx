@@ -3,23 +3,15 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import useMurmurStore from '@/murmur/store/useMurmurStore.js'
 import { audioEngine } from './AudioEngine.js'
-
-// ── Camera → grain parameter mapping ─────────────────────────────────────────
-
-export const MAPPING = {
-  elevationToRate:     { low: 0.6, high: 1.6 },
-  distanceToGrainSize: { near: 0.02, far: 0.25, nearDist: 0.5, farDist: 3.0 },
-  speedToOverlap:      { still: 0.6, fast: 0.15, fastThreshold: 0.02 },
-  detuneCoefficient:   200,
-}
+import { mappingEngine } from './mappingEngine.js'
 
 // ── Color-to-pitch resonance constants ────────────────────────────────────────
 
 export const COLOR_MAPPING = {
-  baseSemitone:       60,    // MIDI C4 = reference
-  resonanceThreshold: 0.2,   // below this, no visual response
-  impulseScale:       4.0,
-  maxMagnify:         2.5,
+  baseSemitone:       60,
+  resonanceThreshold: 0.15,
+  impulseScale:       10.0,
+  maxMagnify:         5.0,
 }
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -29,25 +21,20 @@ function circularDist(a, b) {
   return Math.min(d, 12 - d)
 }
 
-function pitchLabel(pitchClass, octaveOffset) {
-  const note = NOTE_NAMES[Math.round(((pitchClass % 12) + 12) % 12)]
-  const oct  = octaveOffset >= 0 ? `+${octaveOffset}` : `${octaveOffset}`
-  return `${note} ${oct}`
+function smoothstep(e0, e1, x) {
+  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)))
+  return t * t * (3 - 2 * t)
 }
 
 // Estimate dominant pitch class from raw FFT array (dB values).
-// Searches the pitched range ~130 Hz–4200 Hz (bins 6–97 at 44100/2048 binwidth).
-// Returns { pitchClass, octave } or null if no signal found.
 function estimatePitchClass(raw) {
   if (!raw || raw.length < 100) return null
   let peakBin = -1, peakVal = -Infinity
   for (let i = 6; i <= 97; i++) {
     if (raw[i] > peakVal) { peakVal = raw[i]; peakBin = i }
   }
-  if (peakBin < 0 || peakVal < -55) return null  // below noise floor
+  if (peakBin < 0 || peakVal < -55) return null
 
-  // Approximate: bin frequency = bin * sampleRate / fftPoints
-  // fftPoints ≈ 2048 for a 1024-bin analyser at 44100 Hz → ~21.5 Hz/bin
   const freq = peakBin * (44100 / 2048)
   if (freq < 20) return null
 
@@ -57,95 +44,109 @@ function estimatePitchClass(raw) {
   return { pitchClass, octave }
 }
 
-// Reuse Float32Array across frames — avoids GC churn
 const _resonances = new Float32Array(16)
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useSculptDriver({ enabled, uniformsRef }) {
-  const frameCount = useRef(0)
-
   useFrame(() => {
-    // When sculpt is disabled (e.g. cloud not yet loaded), decay shader uniforms
     if (!enabled) {
       if (uniformsRef?.current) {
         const u = uniformsRef.current.uniforms
-        if (u.uSculptElev)  u.uSculptElev.value  = u.uSculptElev.value  * 0.88
-        if (u.uSculptDist)  u.uSculptDist.value  = u.uSculptDist.value  * 0.88
-        if (u.uSculptSpeed) u.uSculptSpeed.value = u.uSculptSpeed.value * 0.88
+        if (u.uSculptElev)  u.uSculptElev.value  *= 0.88
+        if (u.uSculptDist)  u.uSculptDist.value  *= 0.88
+        if (u.uSculptSpeed) u.uSculptSpeed.value *= 0.88
       }
       return
     }
 
-    const { position: camPos, speed } = useMurmurStore.getState().cameraState
+    const store         = useMurmurStore.getState()
+    const gestureState  = store.gestureState
+    const isPlaying     = store.isPlayingPassive
+    const camPos        = store.cameraState.position
+    const speed         = store.cameraState.speed
+
+    // ── Gesture-driven source switching ─────────────────────────────────────
+    if (gestureState === 'touching' && audioEngine.buffer) {
+      // Auto-start passive playback on first touch — instrument wakes when played
+      if (!isPlaying) store.setIsPlayingPassive(true)
+      if (audioEngine.activeSource !== 'grain') {
+        audioEngine.setActiveSource('grain')
+      }
+    } else if (gestureState === 'idle') {
+      if (isPlaying && audioEngine.buffer) {
+        if (audioEngine.activeSource !== 'player') {
+          audioEngine.setActiveSource('player')
+        }
+      } else if (!isPlaying) {
+        if (audioEngine.activeSource !== null && audioEngine.activeSource !== 'grain') {
+          audioEngine.setActiveSource(null)
+        }
+        // If grain was active but we released touch with no passive play,
+        // stop grain after syncing position
+        if (audioEngine.activeSource === 'grain') {
+          audioEngine.setActiveSource(null)
+        }
+      }
+    }
+
+    // ── Camera spherical coords ──────────────────────────────────────────────
     const r = Math.sqrt(camPos.x ** 2 + camPos.y ** 2 + camPos.z ** 2)
     if (r < 0.001) return
 
-    const azimuth   = Math.atan2(camPos.x, camPos.z)
+    const azimuth   = Math.atan2(camPos.x, camPos.z)            // -π..π
     const elevation = Math.asin(THREE.MathUtils.clamp(camPos.y / r, -1, 1))
-
-    const mode = useMurmurStore.getState().mode
 
     let currentPitchClass = 0
     let currentOctave     = 0
     let resonanceScale    = 1.0
-    let hudData           = {}
 
-    if (mode === 'interactive') {
-      // ── Camera → grain params ──────────────────────────────────────────────
+    if (gestureState === 'touching') {
+      // ── Orbital → grain params ─────────────────────────────────────────────
 
-      const positionFraction = (azimuth + Math.PI) / (2 * Math.PI)
+      // Buffer position: azimuth wraps once around the audio file
+      const bufferFraction = (azimuth + Math.PI) / (2 * Math.PI)   // 0..1
 
-      const { elevationToRate } = MAPPING
-      const elevNorm     = (elevation + Math.PI / 2) / Math.PI
-      const playbackRate = elevationToRate.low + elevNorm * (elevationToRate.high - elevationToRate.low)
+      // Playback rate: linear tilt-to-pitch (0.6..1.6) — consistent feel across the range
+      const elevNorm     = (elevation + Math.PI / 2) / Math.PI      // 0..1
+      const playbackRate = 0.6 + elevNorm * 1.0                     // 0.6..1.6
 
-      const { near, far, nearDist, farDist } = MAPPING.distanceToGrainSize
-      const distT    = THREE.MathUtils.clamp((r - nearDist) / (farDist - nearDist), 0, 1)
-      const grainSize = THREE.MathUtils.lerp(near, far, distT)
+      // Grain size: full range — close orbit = tight texture, far = phrase-length grabs
+      const grainSize = THREE.MathUtils.lerp(0.02, 0.4, smoothstep(0.5, 3.0, r))
 
-      const { still, fast, fastThreshold } = MAPPING.speedToOverlap
-      const speedT = THREE.MathUtils.clamp(speed / fastThreshold, 0, 1)
-      const overlap = THREE.MathUtils.lerp(still, fast, speedT)
+      // Overlap: wider range for more expressive density sweep
+      const overlap = THREE.MathUtils.lerp(0.75, 0.08, smoothstep(0, 0.04, speed))
 
-      const detune = (playbackRate - 1.0) * MAPPING.detuneCoefficient
+      // Detune: smooth pitch shift as cents offset
+      const detune = (playbackRate - 1.0) * 200   // ±cents
 
-      const frozen = useMurmurStore.getState().grainFrozen
-      audioEngine.setGrainParams({
-        position: frozen ? undefined : positionFraction,
-        grainSize, overlap, playbackRate, detune,
-      })
+      audioEngine.setGrainParams({ position: bufferFraction, grainSize, overlap, playbackRate, detune })
 
-      // Shader uniforms
+      // Shader sculpt uniforms
       if (uniformsRef?.current) {
         const u = uniformsRef.current.uniforms
         const elevShader  = THREE.MathUtils.clamp(elevation / (Math.PI / 2), -1, 1)
-        const distShader  = distT
-        const speedShader = speedT
+        const distShader  = smoothstep(0.6, 3.5, r)
+        const speedShader = smoothstep(0, 0.05, speed)
         if (u.uSculptElev)  u.uSculptElev.value  = elevShader
         if (u.uSculptDist)  u.uSculptDist.value  = distShader
         if (u.uSculptSpeed) u.uSculptSpeed.value = speedShader
       }
 
-      // Camera-derived pitch class for resonance
-      const totalSemitones = Math.log2(playbackRate) * 12 + detune / 100
-      currentPitchClass    = ((totalSemitones % 12) + 12) % 12
-      currentOctave        = Math.floor(totalSemitones / 12)
-      resonanceScale       = 1.0
+      // Pitch class from playback rate + detune for color resonance
+      const totalSt     = Math.log2(playbackRate) * 12 + detune / 100
+      currentPitchClass = ((totalSt % 12) + 12) % 12
+      currentOctave     = Math.floor(totalSt / 12)
+      resonanceScale    = 1.0
 
-      hudData = {
-        positionFraction,
-        playbackRate,
-        grainSize,
-        overlap,
-        azimuth,
-        elevation,
-        distance: r,
-        speed,
-        currentPitch: pitchLabel(currentPitchClass, currentOctave),
-      }
     } else {
-      // ── PLAYBACK: FFT-derived pitch class for resonance ───────────────────
+      // ── Idle: FFT-derived pitch class ────────────────────────────────────
+      if (uniformsRef?.current) {
+        const u = uniformsRef.current.uniforms
+        if (u.uSculptElev)  u.uSculptElev.value  *= 0.92
+        if (u.uSculptDist)  u.uSculptDist.value  *= 0.92
+        if (u.uSculptSpeed) u.uSculptSpeed.value *= 0.92
+      }
 
       const fft = audioEngine.getFFT()
       const pc  = estimatePitchClass(fft.raw)
@@ -153,19 +154,15 @@ export function useSculptDriver({ enabled, uniformsRef }) {
         currentPitchClass = pc.pitchClass
         currentOctave     = pc.octave
       }
-      resonanceScale = 0.5
+      resonanceScale = 0.8
 
-      hudData = {
-        currentPitch: pc ? pitchLabel(currentPitchClass, currentOctave) : null,
-      }
+      // Update mapping drift from live FFT
+      mappingEngine.updateDrift(fft)
     }
 
-    // ── Color-affinity resonance → per-group visual response (both modes) ──
+    // ── Color-affinity resonance → per-group visual response ────────────────
 
-    const store      = useMurmurStore.getState()
     const affinities = store.cloud?.groupAffinities
-    let litGroups    = 0
-
     _resonances.fill(0)
     if (affinities) {
       for (let i = 0; i < 16; i++) {
@@ -174,26 +171,41 @@ export function useSculptDriver({ enabled, uniformsRef }) {
         const od  = Math.abs(currentOctave - octave)
         const raw = Math.max(0, 1 - (pd / 6 + od / 3)) * affinityStrength
         _resonances[i] = raw > COLOR_MAPPING.resonanceThreshold ? raw : 0
-        if (_resonances[i] > 0.3) litGroups++
       }
     }
 
+    // Build a group mask from regions above resonance threshold so magnify
+    // targets the specific spatial zones that tonally match the current audio
+    let resonantMask = 0
+    let maxResonance = 0
+    for (let i = 0; i < 16; i++) {
+      if (_resonances[i] > 0.15) resonantMask |= (1 << i)
+      if (_resonances[i] > maxResonance) maxResonance = _resonances[i]
+    }
+
+    // ── Effect params from algorithmic mapping ───────────────────────────────
+
+    const mapping = mappingEngine.getCurrentMapping()
+    const fft     = audioEngine.getFFT()
+    const fftMap  = { bass: fft.bass, lowMid: fft.lowMid, highMid: fft.highMid, treble: fft.treble }
+
+    const baseMagnify = mapping.magnify.strength * (fftMap[mapping.magnify.band] ?? 0)
+
     store.effectParamsRef.current = {
-      returnForce:      10.0,
-      explodeStrength:  0,  explodeGroupMask:  0,
-      dissolveRate:     0,  dissolveGroupMask: 0,
-      magnifyTarget:    0,  magnifyGroupMask:  0,
-      chopAdvance:      0,  chopGroupMask:     0,
+      returnForce:      16.0,
+      explodeStrength:  mapping.explode.strength  * (fftMap[mapping.explode.band]  ?? 0),
+      explodeGroupMask: mapping.explode.groupMask,
+      dissolveRate:     mapping.dissolve.strength * (fftMap[mapping.dissolve.band] ?? 0),
+      dissolveGroupMask: mapping.dissolve.groupMask,
+      // Resonating groups get targeted by the FFT-driven magnify in addition to sculpt resonance
+      magnifyTarget:    baseMagnify + maxResonance * 0.6,
+      magnifyGroupMask: resonantMask || mapping.magnify.groupMask,
+      chopAdvance:      mapping.chop.strength     * (fftMap[mapping.chop.band]     ?? 0),
+      chopGroupMask:    mapping.chop.groupMask,
       sculptMode:       1,
       sculptResonance:  _resonances,
       sculptImpulse:    COLOR_MAPPING.impulseScale * resonanceScale,
-      sculptMaxMag:     COLOR_MAPPING.maxMagnify  * resonanceScale,
-    }
-
-    // Throttled store write (~10 fps)
-    frameCount.current++
-    if (frameCount.current % 6 === 0) {
-      store.setSculptParams({ ...hudData, litGroups })
+      sculptMaxMag:     COLOR_MAPPING.maxMagnify   * resonanceScale,
     }
   })
 }
@@ -203,7 +215,6 @@ export function useSculptDriver({ enabled, uniformsRef }) {
 export default function SculptDriver() {
   const cloud    = useMurmurStore(s => s.cloud)
   const uniforms = useMurmurStore(s => s.uniforms)
-  // Sculpt visual frame is always active once a cloud is loaded
   useSculptDriver({ enabled: !!cloud, uniformsRef: uniforms.ref })
   return null
 }

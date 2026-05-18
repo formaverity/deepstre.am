@@ -137,6 +137,37 @@
   font-style: normal;
 }
 
+/* ── Track list ─────────────────────────────────────────────────────────── */
+
+.mi-track-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.mi-track {
+  display: flex;
+  gap: 0.9rem;
+  align-items: baseline;
+}
+
+.mi-track-num {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: rgba(200, 213, 192, 0.2);
+  min-width: 1.6rem;
+  flex-shrink: 0;
+}
+
+.mi-track-name {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: rgba(200, 213, 192, 0.55);
+}
+
 /* ── Cloud list ────────────────────────────────────────────────────────── */
 
 .mi-cloud-list {
