@@ -2,10 +2,10 @@ import { useRef, useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import useMurmurStore from '@/murmur/store/useMurmurStore.js'
-import { audioEngine } from '@/murmur/audio/AudioEngine.js'
 
 const MAX_P = 350
 
+// Each grain: spawns at a cloud point, drifts, fades — bell-curve size envelope
 const vertexShader = /* glsl */`
   attribute float aAge;
   attribute float aMaxAge;
@@ -33,8 +33,8 @@ const fragmentShader = /* glsl */`
 `
 
 export default function SculptParticles() {
-  const gestureState = useMurmurStore(s => s.gestureState)
-  const cloud        = useMurmurStore(s => s.cloud)
+  const mode  = useMurmurStore(s => s.mode)
+  const cloud = useMurmurStore(s => s.cloud)
 
   const poolRef    = useRef([])
   const spawnAccum = useRef(0)
@@ -73,37 +73,23 @@ export default function SculptParticles() {
   useEffect(() => () => { geo.dispose(); mat.dispose() }, [geo, mat])
 
   useFrame((_, delta) => {
-    if (gestureState !== 'touching' || !cloud) {
-      // Kill all particles when not in granular mode
-      for (let i = 0; i < MAX_P; i++) {
-        if (poolRef.current[i]?.alive) {
-          poolRef.current[i].alive = false
-          posArr[i * 3 + 1] = -9999
-          sizeArr[i] = 0
-        }
-      }
-      geo.attributes.position.needsUpdate = true
-      geo.attributes.aSize.needsUpdate    = true
-      return
-    }
-
+    if (mode !== 'sculpt' || !cloud) return
     const dt = Math.min(delta, 0.05)
 
-    // Derive grain visual params from camera state (same source as GranularSculptor)
-    const { position: camPos, speed } = useMurmurStore.getState().cameraState
-    const r = Math.sqrt(camPos.x ** 2 + camPos.y ** 2 + camPos.z ** 2) || 1
-    const elevation = Math.asin(THREE.MathUtils.clamp(camPos.y / r, -1, 1))
+    const sp        = useMurmurStore.getState().sculptParams ?? {}
+    const grainSize = sp.grainSize ?? 0.05
+    const overlap   = sp.overlap   ?? 0.3
+    const elevation = sp.elevation ?? 0   // radians, −π/2..π/2
+    const speed     = sp.speed     ?? 0   // 0..1 normalised
 
-    const grainT    = Math.max(0, Math.min(1, (r - 0.6) / (3.5 - 0.6)))
-    const grainSize = 0.02 + grainT * (0.30 - 0.02)
-    const overlap   = 0.6 - Math.max(0, Math.min(1, speed / 0.05)) * 0.45
+    // Map audio grain params → particle visual params
+    const tGrain    = Math.max(0, Math.min(1, (grainSize - 0.02) / 0.23))
+    const lifetime  = 0.5 + tGrain * 2.0          // 0.5–2.5 s  (large grains linger)
+    const ptSize    = 12 + tGrain * 20             // 12–32 base screen-px
+    const spawnRate = 8 + overlap * 55             // ~8–41 / sec (dense overlap = more grains)
+    const scatter   = 0.025 + speed * 0.07         // 0.025–0.095 units/sec
 
-    const tGrain    = Math.max(0, Math.min(1, (grainSize - 0.02) / 0.28))
-    const lifetime  = 0.5 + tGrain * 2.0
-    const ptSize    = 12 + tGrain * 20
-    const spawnRate = 8 + overlap * 55
-    const scatter   = 0.025 + speed * 0.07
-
+    // Spawn new particles into dead slots
     spawnAccum.current += spawnRate * dt
     let toSpawn = Math.floor(spawnAccum.current)
     spawnAccum.current -= toSpawn
@@ -120,7 +106,7 @@ export default function SculptParticles() {
       const angle = Math.random() * Math.PI * 2
       const mag   = scatter * (0.4 + Math.random() * 0.6)
       p.vx     = Math.cos(angle) * mag
-      p.vy     = Math.sin(angle) * mag + elevation * 0.018
+      p.vy     = Math.sin(angle) * mag + elevation * 0.018  // tilt drift with camera
       p.vz     = (Math.random() - 0.5) * scatter
       p.age    = 0
       p.maxAge = lifetime * (0.5 + Math.random() * 1.0)
@@ -128,14 +114,24 @@ export default function SculptParticles() {
       toSpawn--
     }
 
+    // Integrate and write to GPU buffers
     for (let i = 0; i < MAX_P; i++) {
       const p = poolRef.current[i]
-      if (!p.alive) { posArr[i * 3 + 1] = -9999; sizeArr[i] = 0; continue }
+      if (!p.alive) {
+        posArr[i * 3 + 1] = -9999
+        sizeArr[i]        = 0
+        continue
+      }
       p.age += dt
       if (p.age >= p.maxAge) {
-        p.alive = false; posArr[i * 3 + 1] = -9999; sizeArr[i] = 0; continue
+        p.alive           = false
+        posArr[i * 3 + 1] = -9999
+        sizeArr[i]        = 0
+        continue
       }
-      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt
+      p.x += p.vx * dt
+      p.y += p.vy * dt
+      p.z += p.vz * dt
       posArr[i * 3]     = p.x
       posArr[i * 3 + 1] = p.y
       posArr[i * 3 + 2] = p.z
@@ -150,6 +146,6 @@ export default function SculptParticles() {
     geo.attributes.aSize.needsUpdate    = true
   })
 
-  if (!cloud) return null
+  if (mode !== 'sculpt' || !cloud) return null
   return <points geometry={geo} material={mat} />
 }

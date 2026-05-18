@@ -88,21 +88,21 @@ export const fragmentShaderGpgpu = /* glsl */`
     float alpha = 1.0 - smoothstep( edgeSoft, 0.50, dist );
 
     vec3 col = vColor;
-    col = mix( col, uTintBass,   uBassEnergy   * 0.55 );
-    col = mix( col, uTintTreble, uTrebleEnergy * 0.45 );
-    col = col * ( 1.0 + uMidEnergy * 0.7 );
+    col = mix( col, uTintBass,   uBassEnergy   * 0.28 );
+    col = mix( col, uTintTreble, uTrebleEnergy * 0.22 );
+    col = col * ( 1.0 + uMidEnergy * 0.30 );
 
     float elevWarm = max( 0.0, -uSculptElev );
     float elevCool = max( 0.0,  uSculptElev );
-    col = mix( col, vec3( 1.0, 0.35, 0.05 ), elevWarm * 0.75 );
-    col = mix( col, vec3( 0.05, 0.45, 1.0 ), elevCool * 0.75 );
+    col = mix( col, vec3( 1.0, 0.35, 0.05 ), elevWarm * 0.28 );
+    col = mix( col, vec3( 0.05, 0.45, 1.0 ), elevCool * 0.28 );
 
-    col = col * ( 1.0 + uSculptDist * 0.6 );
+    col = col * ( 1.0 + uSculptDist * 0.30 );
 
     float edgeDissolve = smoothstep( 0.0, 0.50, dist ) * uSculptSpeed;
     alpha = alpha * ( 1.0 - edgeDissolve * 0.75 );
 
-    col = col * 0.60;
+    col = col * 0.80;
 
     gl_FragColor = vec4( col, alpha * uOpacity * vAlpha );
   }

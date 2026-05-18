@@ -37,7 +37,7 @@ export default function IframeModal({ project }) {
       <div className="frame-modal">
         <div className="frame-header">
           <span className="frame-title">{project.name}</span>
-          <StatusBadge status={project.status} />
+          {project.status !== 'active' && <StatusBadge status={project.status} />}
           <div className="frame-header-actions">
             {project.target && (
               <a

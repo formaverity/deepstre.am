@@ -4,17 +4,28 @@ import useMurmurStore from '@/murmur/store/useMurmurStore.js'
 import { audioEngine } from '@/murmur/audio/AudioEngine.js'
 import { useSEO } from '@/lib/useSEO.js'
 import PointCloudScene from './scene/PointCloudScene.jsx'
-import SourceBar from './ui/SourceBar.jsx'
+import ModeToggle from './ui/ModeToggle.jsx'
+import MediaBar from './ui/MediaBar.jsx'
+import SculptHUD from './ui/SculptHUD.jsx'
+import KeyboardHelper from './ui/KeyboardHelper.jsx'
+import MappingsPanel from './ui/MappingsPanel.jsx'
 import './murmur.css'
 
+// Mode-default camera positions
+const CAM = {
+  sculpt:   { x: 2.2, y: 1.0, z: 2.2 },
+  reactive: { x: 2.0, y: 1.5, z: 2.5 },
+}
+
 export default function Murmur() {
-  const loadCloud    = useMurmurStore(s => s.loadCloud)
-  const cloudLoading = useMurmurStore(s => s.cloudLoading)
-  const cloudError   = useMurmurStore(s => s.cloudError)
-  const cloud        = useMurmurStore(s => s.cloud)
-  const setIsPlayingPassive = useMurmurStore(s => s.setIsPlayingPassive)
-  const isPlayingPassive    = useMurmurStore(s => s.isPlayingPassive)
-  const decimationNotice    = useMurmurStore(s => s.decimationNotice)
+  const loadCloud        = useMurmurStore(s => s.loadCloud)
+  const cloudLoading     = useMurmurStore(s => s.cloudLoading)
+  const cloudError       = useMurmurStore(s => s.cloudError)
+  const cloud            = useMurmurStore(s => s.cloud)
+  const mode             = useMurmurStore(s => s.mode)
+  const decimationNotice = useMurmurStore(s => s.decimationNotice)
+  const setCameraTarget  = useMurmurStore(s => s.setCameraTarget)
+  const setGrainFrozen   = useMurmurStore(s => s.setGrainFrozen)
 
   const navigate = useNavigate()
 
@@ -24,29 +35,55 @@ export default function Murmur() {
     image:       'https://deepstre.am/og-murmur.png',
   })
 
-  const [exiting, setExiting]           = useState(false)
-  const [breadcrumbVisible, setBreadcrumbVisible] = useState(true)
-  const [noticeText, setNoticeText]     = useState(null)
-  const noticeTimer                     = useRef(null)
-  const wasPlaying                      = useRef(false)
+  const [vignetteActive, setVignetteActive] = useState(false)
+  const [noticeText, setNoticeText]         = useState(null)
+  const [exiting, setExiting]               = useState(false)
 
+  // Navigate back to pond — fade visual + audio, save session state, then route
   const navigateToPond = useCallback(async () => {
-    setExiting(true)
+    try {
+      const state = useMurmurStore.getState()
+      sessionStorage.setItem('murmur_mode', state.mode)
+      if (state.sculptParams) {
+        sessionStorage.setItem('murmur_sculpt_params', JSON.stringify(state.sculptParams))
+      }
+    } catch (_) {}
+
+    setExiting(true)  // kick off CSS opacity fade
+
     if (audioEngine.isAnyAudioActive) audioEngine.fadeOut(0.3)
-    await new Promise(r => setTimeout(r, 340))
-    audioEngine.stopAll()
-    audioEngine.fadeIn(0.001)
+
+    await new Promise(r => setTimeout(r, 350))  // wait for fade to reach silence
+
+    audioEngine.stopAll()  // stop all players now that volume is at -60dB
     navigate('/')
   }, [navigate])
+
+  const firstMount    = useRef(true)
+  const swapTimer     = useRef(null)
+  const vignetteTimer = useRef(null)
+  const camTimer      = useRef(null)
+  const noticeTimer   = useRef(null)
+  const wasPlaying    = useRef(false)
 
   // Load default cloud on mount
   useEffect(() => {
     loadCloud('default-grove')
   }, [loadCloud])
 
-  // Restore audio volume on mount (in case previous exit faded it out)
+  // Restore session state from previous visit and reset volume
   useEffect(() => {
-    audioEngine.fadeIn(0.001)
+    audioEngine.fadeIn(0.001)  // reset in case previous exit left volume faded
+    try {
+      const savedMode = sessionStorage.getItem('murmur_mode')
+      if (savedMode === 'reactive' || savedMode === 'sculpt') {
+        useMurmurStore.getState().setMode(savedMode)
+      }
+      const savedParams = sessionStorage.getItem('murmur_sculpt_params')
+      if (savedParams) {
+        useMurmurStore.getState().setSculptParams(JSON.parse(savedParams))
+      }
+    } catch (_) {}
   }, [])
 
   // Decimation notice auto-dismiss
@@ -62,72 +99,91 @@ export default function Murmur() {
   useEffect(() => {
     const handler = () => {
       if (document.hidden) {
-        wasPlaying.current = audioEngine.activeSource !== null
-        if (wasPlaying.current) audioEngine.setActiveSource(null)
+        wasPlaying.current = audioEngine.isPlaying
+        if (audioEngine.isPlaying) audioEngine.pause()
       } else {
-        if (wasPlaying.current && useMurmurStore.getState().isPlayingPassive) {
-          audioEngine.setActiveSource('player')
-        }
+        if (wasPlaying.current) audioEngine.play()
       }
     }
     document.addEventListener('visibilitychange', handler)
     return () => document.removeEventListener('visibilitychange', handler)
   }, [])
 
-  // Keyboard shortcuts (no hint bar — undisplayed)
+  // Mode-switch choreography
   useEffect(() => {
-    const handler = (e) => {
-      // Ignore when focus is in an input/select
-      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return
+    if (firstMount.current) { firstMount.current = false; return }
+    if (!audioEngine.isReady) return
 
-      if (e.key === ' ' || e.code === 'Space') {
-        e.preventDefault()
-        const playing = useMurmurStore.getState().isPlayingPassive
-        const loaded  = useMurmurStore.getState().audio.isLoaded
-        if (!loaded) return
-        if (playing) {
-          setIsPlayingPassive(false)
-          audioEngine.setActiveSource(null)
+    clearTimeout(swapTimer.current)
+    clearTimeout(vignetteTimer.current)
+    clearTimeout(camTimer.current)
+
+    // Reset grain freeze on every mode change
+    setGrainFrozen(false)
+
+    // 0ms: vignette darkens edges (CSS animation handles 0→peak→0)
+    setVignetteActive(true)
+
+    // 80ms: begin audio fade-out over 200ms
+    swapTimer.current = setTimeout(() => {
+      audioEngine.fadeOut(0.2)
+
+      // 160ms (80+80): swap chains at fade midpoint, then fade back in
+      setTimeout(() => {
+        if (mode === 'sculpt') {
+          audioEngine.detachReactiveChain()
+          audioEngine.attachSculptChain()
         } else {
-          setIsPlayingPassive(true)
-          audioEngine.setActiveSource('player')
+          audioEngine.detachSculptChain()
+          audioEngine.attachReactiveChain()
         }
-      }
+        audioEngine.fadeIn(0.2)
+      }, 80)
+    }, 80)
 
-      if (e.key === 'Escape') {
-        navigateToPond()
-      }
+    // 200ms: ease camera toward mode-default position
+    camTimer.current = setTimeout(() => {
+      setCameraTarget(CAM[mode])
+    }, 200)
 
-      if (e.key === 'i' || e.key === 'I') {
-        setBreadcrumbVisible(v => !v)
-      }
+    // 700ms: remove vignette element (CSS animation is complete)
+    vignetteTimer.current = setTimeout(() => setVignetteActive(false), 700)
+
+    return () => {
+      clearTimeout(swapTimer.current)
+      clearTimeout(vignetteTimer.current)
+      clearTimeout(camTimer.current)
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [navigateToPond, setIsPlayingPassive])
+  }, [mode, setCameraTarget, setGrainFrozen])
 
   return (
     <div className={`murmur-root${exiting ? ' murmur-root--exiting' : ''}`}>
 
-      {/* Top-left: breadcrumb */}
-      {breadcrumbVisible && (
-        <nav className="murmur-breadcrumb" aria-label="breadcrumb">
-          <button className="murmur-breadcrumb-link" onClick={navigateToPond}>← pond</button>
-          <span className="murmur-breadcrumb-sep">·</span>
-          <span className="murmur-breadcrumb-current">murmur</span>
-        </nav>
-      )}
+      {/* Vignette — edge darkening during mode transitions */}
+      {vignetteActive && <div className="murmur-vignette" aria-hidden="true" />}
 
-      {/* Top-right: close button */}
-      <button
-        className="murmur-close-btn"
-        style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', zIndex: 10 }}
-        onClick={navigateToPond}
-        title="return to pond"
-        aria-label="return to pond"
-      >
-        ✕
-      </button>
+      {/* Top-left: breadcrumb */}
+      <nav className="murmur-breadcrumb" aria-label="breadcrumb">
+        <button className="murmur-breadcrumb-link" onClick={navigateToPond}>← pond</button>
+      </nav>
+
+      {/* Top-right: status + close button */}
+      <div className="murmur-top-right-cluster">
+        <div className="murmur-status" aria-label="audio status">
+          <span className={`murmur-status-dot${cloud ? ' murmur-status-dot--ready' : ''}`} />
+          <span>{cloud ? 'ready' : 'idle'}</span>
+        </div>
+        <button
+          className="murmur-close-btn"
+          onClick={navigateToPond}
+          title="return to pond"
+          aria-label="return to pond"
+        >
+          ✕
+        </button>
+      </div>
+      {/* Top-center: mode toggle */}
+      {cloud && <ModeToggle />}
 
       {/* Loading / error / idle placeholder */}
       {cloudLoading && (
@@ -147,11 +203,16 @@ export default function Murmur() {
         </div>
       )}
 
-      {/* Full-bleed 3-D scene */}
+      {/* Full-bleed 3-D scene — keep mounted once initial cloud is ready; cloud swaps are handled inside PointCloud via useMemo */}
       {cloud && <PointCloudScene />}
 
-      {/* Bottom-center: SourceBar (audio + model dropdowns) */}
-      <SourceBar />
+      {/* Bottom-center: combined media bar */}
+      <div className="murmur-bottom-center">
+        <MediaBar />
+      </div>
+
+      {/* Bottom-right: sculpt HUD */}
+      {cloud && <SculptHUD />}
 
       {/* Decimation notice */}
       {noticeText && (
@@ -159,6 +220,16 @@ export default function Murmur() {
           {noticeText}
         </div>
       )}
+
+      {/* Left-side panel: mappings (reactive only) */}
+      {cloud && mode === 'reactive' && (
+        <div className="murmur-left-panels">
+          <MappingsPanel />
+        </div>
+      )}
+
+      {/* Keyboard shortcuts helper (desktop only, fades after 5s) */}
+      {cloud && <KeyboardHelper onNavigateToPond={navigateToPond} />}
 
     </div>
   )

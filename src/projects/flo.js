@@ -1,8 +1,8 @@
 export default {
   slug: 'flo',
-  name: 'Flo',
-  description: 'Field observation log — seasonal notes and ecological encounter records',
-  status: 'archival',
+  name: 'wtflo.io',
+  description: 'living notation of the phenomenal field — attention, encounter, passage',
+  status: 'active',
   home: { x: 0.28, y: 0.68 },
   glyph: {
     ascii: '☰',

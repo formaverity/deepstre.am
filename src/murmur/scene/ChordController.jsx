@@ -1,19 +1,19 @@
-import { useEffect, useRef } from 'react'
-import { useThree } from '@react-three/fiber'
+import { useEffect, useRef, useMemo } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import useMurmurStore from '@/murmur/store/useMurmurStore.js'
 import { audioEngine } from '@/murmur/audio/AudioEngine.js'
 import { COLOR_MAPPING } from '@/murmur/audio/GranularSculptor.jsx'
-import { chordEngine } from '@/murmur/audio/chordEngine.js'
+import { resolveIntervals } from '@/murmur/audio/chordVoicings.js'
 
-const CHORD_DELAY_MS = 80
-const NAV_THRESHOLD  = 5     // px — beyond this = navigation, abort chord
-const MAX_DRAG_PX    = 300
-const SPHERE_RADIUS  = 1.5
-const CUTOFF_MIN     = 200
-const CUTOFF_MAX     = 12000
-const Q_MIN          = 0.5
-const Q_MAX          = 8.0
+const CHORD_DELAY_MS  = 80
+const NAV_THRESHOLD   = 5    // px — beyond this = navigation, abort chord
+const MAX_DRAG_PX     = 300  // px for full filter/Q sweep
+const SPHERE_RADIUS   = 1.5
+const CUTOFF_MIN      = 200
+const CUTOFF_MAX      = 12000
+const Q_MIN           = 0.5
+const Q_MAX           = 8.0
 
 function circularDist(a, b) {
   const d = Math.abs(a - b)
@@ -32,7 +32,8 @@ function buildGroupMask(groupAffinities, rootIdx, intervals) {
   let mask = 1 << rootIdx
   for (let vi = 1; vi < intervals.length; vi++) {
     const targetPC = ((rootPC + Math.round(intervals[vi])) % 12 + 12) % 12
-    let bestDist = Infinity, bestIdx = rootIdx
+    let bestDist = Infinity
+    let bestIdx  = rootIdx
     for (let i = 0; i < 16; i++) {
       if (i === rootIdx) continue
       const d = circularDist(groupAffinities[i].pitchClass, targetPC)
@@ -43,59 +44,83 @@ function buildGroupMask(groupAffinities, rootIdx, intervals) {
   return mask
 }
 
-function sampleGroupColor(cloud, groupIdx) {
-  const { positions, colors, count } = cloud
-  if (!colors || !positions) return { r: 0.72, g: 0.80, b: 0.70 }
+// ── Fresnel rim shaders (shared with OrbitIndicator aesthetic) ─────────────
 
-  const SKIP = count > 60000 ? Math.ceil(count / 10000) : 1
-  let r = 0, g = 0, b = 0, n = 0
+const rimVert = /* glsl */`
+  varying vec3 vNormal;
+  varying vec3 vViewDir;
+  void main() {
+    vNormal  = normalize(normalMatrix * normal);
+    vec4 mv  = modelViewMatrix * vec4(position, 1.0);
+    vViewDir = normalize(-mv.xyz);
+    gl_Position = projectionMatrix * mv;
+  }
+`
 
-  for (let i = 0; i < count; i += SKIP) {
-    const px = positions[i * 3]
-    const pz = positions[i * 3 + 2]
-    const gx = Math.min(3, Math.max(0, Math.floor((px + 1.0) * 2.0)))
-    const gz = Math.min(3, Math.max(0, Math.floor((pz + 1.0) * 2.0)))
-    if (gx * 4 + gz === groupIdx) {
-      r += colors[i * 3]; g += colors[i * 3 + 1]; b += colors[i * 3 + 2]; n++
+const rimFrag = /* glsl */`
+  uniform float uOpacity;
+  varying vec3  vNormal;
+  varying vec3  vViewDir;
+  void main() {
+    float rim   = 1.0 - abs(dot(normalize(vNormal), normalize(vViewDir)));
+    float alpha = pow(rim, 2.8) * uOpacity;
+    gl_FragColor = vec4(0.82, 0.80, 0.88, alpha);
+  }
+`
+
+// ── Visual ring (inside Canvas) ────────────────────────────────────────────
+
+export function ChordRing() {
+  const meshRef  = useRef(null)
+  const uniforms = useMemo(() => ({ uOpacity: { value: 0 } }), [])
+
+  useFrame(() => {
+    if (!meshRef.current) return
+    const cp = useMurmurStore.getState().chordParamsRef?.current
+    if (!cp) return
+
+    if (cp.active && cp.worldPoint) {
+      meshRef.current.position.copy(cp.worldPoint)
     }
-  }
 
-  if (n === 0) return { r: 0.72, g: 0.80, b: 0.70 }
+    const target = cp.active ? 0.85 : 0
+    uniforms.uOpacity.value += (target - uniforms.uOpacity.value) * 0.12
+  })
 
-  const rA = r / n, gA = g / n, bA = b / n
-  const maxC = Math.max(rA, gA, bA)
-  if (maxC < 0.01) return { r: 0.72, g: 0.80, b: 0.70 }
-
-  const lum = 0.299 * rA + 0.587 * gA + 0.114 * bA
-  const amt = 0.35
-  return {
-    r: rA * (1 - amt) + lum * amt,
-    g: gA * (1 - amt) + lum * amt,
-    b: bA * (1 - amt) + lum * amt,
-  }
+  return (
+    <mesh ref={meshRef}>
+      <sphereGeometry args={[0.22, 24, 18]} />
+      <shaderMaterial
+        vertexShader={rimVert}
+        fragmentShader={rimFrag}
+        uniforms={uniforms}
+        transparent
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+      />
+    </mesh>
+  )
 }
 
-function flushChordParams(store, pointerMap) {
-  let anyActive = false, mask = 0, maxMag = 0, latestWorldPoint = null
-  for (const [, p] of pointerMap) {
-    if (p.isChordActive) {
-      anyActive = true
-      mask |= p.groupMask
-      maxMag = Math.max(maxMag, 1.5)
-      latestWorldPoint = p.worldPoint
-    }
-  }
-  store.chordParamsRef.current = {
-    active: anyActive, groupMask: mask, magnifyTarget: maxMag, worldPoint: latestWorldPoint,
-  }
-}
+// ── Controller (attaches to canvas DOM, no render output) ─────────────────
 
 export default function ChordController() {
   const { camera, gl } = useThree()
-  const pointers = useRef(new Map())
+
+  // mutable state for the current pointer interaction — no re-renders needed
+  const ps = useRef({
+    pointerId:     null,
+    downX:         0,
+    downY:         0,
+    chordTimer:    null,
+    isChordActive: false,
+    isNav:         false,
+    worldPoint:    null,
+  })
 
   useEffect(() => {
     const canvas    = gl.domElement
+    const p         = ps.current
     const raycaster = new THREE.Raycaster()
     const sphere    = new THREE.Sphere(new THREE.Vector3(0, 0, 0), SPHERE_RADIUS)
     const ndcVec    = new THREE.Vector2()
@@ -105,107 +130,102 @@ export default function ChordController() {
       const rect = canvas.getBoundingClientRect()
       ndcVec.set(
         ((cx - rect.left) / rect.width)  *  2 - 1,
-        -((cy - rect.top) / rect.height) *  2 + 1,
+        -((cy - rect.top)  / rect.height) *  2 + 1,
       )
       raycaster.setFromCamera(ndcVec, camera)
       hitVec.set(0, 0, 0)
       return raycaster.ray.intersectSphere(sphere, hitVec) ? hitVec.clone() : null
     }
 
-    const triggerChord = (pid, worldPoint) => {
-      const p     = pointers.current.get(pid)
+    const triggerChord = (worldPoint) => {
       const store = useMurmurStore.getState()
-      if (!p || !store.cloud?.groupAffinities || !audioEngine.isReady) return
+      if (!store.cloud?.groupAffinities || !audioEngine.isReady) return
 
       const affs     = store.cloud.groupAffinities
       const groupIdx = groupFromWorldPoint(worldPoint.x, worldPoint.z)
       const aff      = affs[groupIdx]
       const rootSt   = aff.octave * 12 + aff.pitchClass + COLOR_MAPPING.baseSemitone
 
-      // Use algorithmic chord voicing from chordEngine
-      const intervals = chordEngine.getIntervals()
-      const voices    = chordEngine.voiceCount
+      const { chordConfig } = store
+      const intervals = resolveIntervals(chordConfig)
+      const voices    = Math.min(chordConfig.voices, intervals.length)
       const groupMask = buildGroupMask(affs, groupIdx, intervals)
 
       const azimuth  = Math.atan2(worldPoint.x, worldPoint.z)
       const position = (azimuth + Math.PI) / (2 * Math.PI)
 
-      audioEngine.startChord(pid, { rootSemitone: rootSt, intervals, voices, position })
-
+      audioEngine.startChord({ rootSemitone: rootSt, intervals, voices, position })
       p.isChordActive = true
-      p.groupMask     = groupMask
 
-      const color    = sampleGroupColor(store.cloud, groupIdx)
-      const seed     = ((pid * 9301 + Date.now()) * 49297) | 0
-      const smudgeId = store.addSmudge({
-        position: { x: worldPoint.x, y: worldPoint.y, z: worldPoint.z },
-        seed,
-        color,
-      })
-      p.smudgeId = smudgeId
-
-      flushChordParams(store, pointers.current)
+      store.chordParamsRef.current = {
+        active:       true,
+        groupMask,
+        magnifyTarget: 1.5,
+        worldPoint:   worldPoint.clone(),
+      }
     }
 
     const onPointerDown = (e) => {
+      // Second pointer down while tracking → multi-touch, cancel chord (orbit/pinch wins)
+      if (p.pointerId !== null) {
+        clearTimeout(p.chordTimer)
+        p.isNav = true
+        return
+      }
       if (!audioEngine.isReady) return
 
-      const worldPoint = getWorldPoint(e.clientX, e.clientY)
-      const pid = e.pointerId
+      p.pointerId     = e.pointerId
+      p.downX         = e.clientX
+      p.downY         = e.clientY
+      p.isNav         = false
+      p.isChordActive = false
+      p.worldPoint    = getWorldPoint(e.clientX, e.clientY)
 
-      const state = {
-        downX: e.clientX, downY: e.clientY,
-        chordTimer: null, isChordActive: false,
-        isNav: false, worldPoint,
-        groupMask: 0, smudgeId: null,
-      }
-      pointers.current.set(pid, state)
-
-      state.chordTimer = setTimeout(() => {
-        if (!state.isNav && state.worldPoint) triggerChord(pid, state.worldPoint)
+      clearTimeout(p.chordTimer)
+      p.chordTimer = setTimeout(() => {
+        if (!p.isNav && p.worldPoint) triggerChord(p.worldPoint)
       }, CHORD_DELAY_MS)
     }
 
     const onPointerMove = (e) => {
-      const p = pointers.current.get(e.pointerId)
-      if (!p) return
+      if (e.pointerId !== p.pointerId) return
 
       const dx   = e.clientX - p.downX
       const dy   = e.clientY - p.downY
       const dist = Math.sqrt(dx * dx + dy * dy)
 
       if (!p.isChordActive) {
-        if (dist > NAV_THRESHOLD) { p.isNav = true; clearTimeout(p.chordTimer) }
+        if (dist > NAV_THRESHOLD) {
+          p.isNav = true
+          clearTimeout(p.chordTimer)
+        }
         return
       }
 
+      // Map drag to filter cutoff (x) and resonance Q (y)
+      // Right = open, left = closed; up = squelchy, down = tame
       const cutoffT = Math.max(0, Math.min(1, 1.0 + dx / MAX_DRAG_PX))
       const qT      = Math.max(0, Math.min(1, -dy / MAX_DRAG_PX))
       const logMin  = Math.log(CUTOFF_MIN)
       const logMax  = Math.log(CUTOFF_MAX)
-      audioEngine.updateChord(e.pointerId, {
+      audioEngine.updateChord({
         filterCutoff: Math.exp(logMin + (logMax - logMin) * cutoffT),
         filterQ:      Q_MIN + (Q_MAX - Q_MIN) * qT,
       })
     }
 
     const onPointerUp = (e) => {
-      const p = pointers.current.get(e.pointerId)
-      if (!p) return
-
+      if (e.pointerId !== p.pointerId) return
       clearTimeout(p.chordTimer)
+      p.pointerId = null
 
       if (p.isChordActive) {
-        audioEngine.stopChord(e.pointerId)
+        audioEngine.stopChord()
         p.isChordActive = false
-        if (p.smudgeId) {
-          useMurmurStore.getState().releaseSmudge(p.smudgeId)
-          p.smudgeId = null
+        useMurmurStore.getState().chordParamsRef.current = {
+          active: false, groupMask: 0, magnifyTarget: 0, worldPoint: null,
         }
-        flushChordParams(useMurmurStore.getState(), pointers.current)
       }
-
-      pointers.current.delete(e.pointerId)
     }
 
     canvas.addEventListener('pointerdown',   onPointerDown)
@@ -220,16 +240,7 @@ export default function ChordController() {
       canvas.removeEventListener('pointerup',     onPointerUp)
       canvas.removeEventListener('pointerleave',  onPointerUp)
       canvas.removeEventListener('pointercancel', onPointerUp)
-
-      const store = useMurmurStore.getState()
-      for (const [pid, p] of pointers.current) {
-        clearTimeout(p.chordTimer)
-        if (p.isChordActive) {
-          audioEngine.stopChord(pid)
-          if (p.smudgeId) store.releaseSmudge(p.smudgeId)
-        }
-      }
-      pointers.current.clear()
+      clearTimeout(p.chordTimer)
     }
   }, [camera, gl])
 

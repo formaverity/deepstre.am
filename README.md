@@ -21,22 +21,97 @@ Pond data is a JSON blob with grid dimensions, base64-encoded per-cell arrays (b
 
 ### MURMUR (`src/murmur/`)
 
-An interactive point cloud audio instrument at `/murmur`. LiDAR scans are loaded as PLY files, decimated to a target point count, and rendered as a particle system that responds to audio.
+An interactive point cloud audio-visual instrument at `/murmur`. LiDAR scans are loaded as PLY files, decimated to a target point count, and rendered as a GPGPU particle system. Audio and camera position drive the cloud's behaviour — both visually and sonically — in real time.
 
 **Two modes:**
 
-- **Reactive** — audio drives the cloud's visual energy. Per-frame FFT analysis maps bass → vertical swell, treble → shimmer. Idle breathing uses a 0.2 Hz sine on the bass channel.
-- **Sculpt** — camera orbital position controls a granular synthesiser. Horizontal drag scrubs the buffer position (one full orbit = full file), vertical drag sets playback rate (down = slow/thick, up = pitched), scroll/pinch controls grain size (close = granular texture, far = long phrases), orbit speed modulates grain overlap density. SPACE freezes the buffer position.
+- **Reactive** — audio drives the cloud's visual energy. Per-frame FFT analysis produces four smoothed bands (bass, lowMid, highMid, treble), each mappable to one of four particle effects: explode, dissolve, magnify, or chop. Each effect targets a 16-bit bitmask of spatial groups. Idle breathing uses a 0.2 Hz sine on the bass channel when no audio is playing.
+- **Sculpt** — camera orbital position controls a granular synthesiser. Azimuth scrubs the buffer position (one full orbit = full file), elevation sets playback rate (−90° = 0.6×, +90° = 1.6×), camera distance sets grain size (near = 0.02 s granular texture, far = 0.25 s long phrases), orbital speed modulates grain overlap density (fast orbit = sparse, still = dense). SPACE freezes the buffer read position while grain parameters continue updating.
 
-**Key files:**
-- **`Murmur.jsx`** — layout orchestrator; choreographs mode transitions (80 ms audio fade-out → 160 ms chain swap at fade midpoint → 200 ms camera lerp → 700 ms vignette cleanup)
-- **`scene/`** — React Three Fiber canvas; `PointCloud` uses BufferGeometry + ShaderMaterial; OrbitControls with velocity tracking and mode-specific camera defaults
-- **`audio/AudioEngine.js`** — Tone.js singleton managing Player and GrainPlayer instances
-- **`audio/ReactiveAnalyzer.js`** — FFT → shader uniforms each frame
-- **`audio/GranularSculptor.js`** — spherical camera coordinates → grain parameters each frame
-- **`ui/`** — ModeToggle, Transport (RAF-driven scrub, 1 Hz display), AudioUpload (drag-drop with waveform animation), SculptHUD (live grain readout), CloudPicker (library + PLY upload with metadata), KeyboardHelper (shortcuts with 5 s fade hint bar)
-- **`store/`** — Zustand state for mode, cloud, camera, audio, sculpt params, grain freeze, and info panel
-- **`clouds/`** — bundled PLY registry with metadata; loaders for PLY decoding, stratified 16³-grid decimation, and normalization to −1…+1
+**Mode-switch choreography** (`Murmur.jsx`):
+- 0 ms: edge-darkening vignette fades in (CSS animation)
+- 80 ms: audio fade-out begins over 200 ms
+- 160 ms: signal chains swap at fade midpoint, fade-in begins
+- 200 ms: camera lerps toward mode-default position
+- 700 ms: vignette element removed
+
+Session state (mode + sculpt params) is saved to `sessionStorage` on exit and restored on re-enter.
+
+---
+
+#### Audio engine (`audio/`)
+
+**`AudioEngine.js`** — Tone.js singleton. Manages two parallel signal chains sharing a single FFT analyser → destination:
+- **Reactive chain**: `Tone.Player` for standard playback with loop and seek
+- **Sculpt chain**: `Tone.GrainPlayer` with per-frame `loopStart`/`loopEnd` window updates
+- **Chord layer**: up to N `Tone.GrainPlayer` voices tuned by semitone intervals, routed through a shared gain → `Tone.Filter` → analyser. Chord voices fade out gracefully (40 ms gain ramp) when released.
+- BPM detection runs deferred after buffer load (does not block playback startup).
+- `fadeOut` / `fadeIn` ramp the master destination volume for clean chain swaps.
+
+**`ReactiveAnalyzer.jsx`** (`useReactiveDriver`) — runs in `useFrame` every tick. Reads FFT, computes band energies, applies sensitivity multiplier, and writes `effectParamsRef.current` for the GPGPU shaders. Also writes `uBassEnergy`, `uMidEnergy`, `uTrebleEnergy` uniforms for fragment-shader color tinting.
+
+**`GranularSculptor.jsx`** (`useSculptDriver`) — runs in `useFrame` every tick. Converts spherical camera coordinates to grain parameters, applies them to the `GrainPlayer`, and writes sculpt shader uniforms. Also computes **color-affinity resonance**: the current playback rate is converted to a pitch class; each of the 16 spatial groups has an assigned pitch class (derived from its dominant color hue), and proximity of the current pitch to each group's pitch produces a `sculptResonance[16]` float array that drives per-group visual impulse in the GPGPU shaders.
+
+**`chordVoicings.js`** — voicing presets: Thirds, Open, Quartal, Unison (micro-detuned), Custom. Exports `resolveIntervals(chordConfig)` used by the chord trigger.
+
+**`detectBPM.js`** — lightweight onset detection for BPM readout in the transport bar.
+
+---
+
+#### GPGPU particle system (`scene/gpgpu/`)
+
+`ParticleSystem.js` uses `GPUComputationRenderer` with four ping-pong textures:
+
+| Texture | Content |
+|---|---|
+| `position` | Current XYZ per particle |
+| `velocity` | Current velocity per particle |
+| `home` | Rest position (written once at load) |
+| `state` | Per-particle scalar state (chop phase, dissolve alpha, magnify scale) |
+
+Each compute pass runs a GLSL fragment shader that reads the previous frame's textures and writes the next. The four effect channels (explode, dissolve, magnify, chop) are encoded as bit-packed group masks — each particle knows its group index and tests `(groupMask >> groupIdx) & 1`. In sculpt mode the `sculptResonance[16]` array drives per-group attraction impulses toward group centers.
+
+**Group physics (`scene/groupPhysics.js`)** — CPU spring-damper simulation that mirrors the GPGPU velocity shader exactly. Both `SculptOverlay` and `CheeseStrings` read from the shared `groupState` buffers. Frame-time deduplication prevents double-advance when multiple scene components call `updateGroupPhysics` in the same frame.
+
+---
+
+#### Scene components (`scene/`)
+
+- **`PointCloudScene.jsx`** — R3F `<Canvas>` with `fog`, `ambientLight`, GPGPU fallback flag, and all scene children. Mobile detection gates antialiasing and DPR.
+- **`PointCloud.jsx`** — `BufferGeometry` + `ShaderMaterial`; swaps cloud data via `useMemo` without unmounting. Consumes `effectParamsRef` and `chordParamsRef` via refs (no re-renders).
+- **`CameraRig.jsx`** — wraps `OrbitControls`; tracks camera velocity each frame and writes `cameraState` to the store at ~10 fps. Lerps toward `cameraTarget` when set.
+- **`SculptOverlay.jsx`** — 16 edge-wireframe boxes arranged on the 4×4 spatial grid. In sculpt mode with grid on, each box's opacity is driven by its `sculptResonance` value. In reactive mode boxes stay at dim rest opacity.
+- **`CheeseStrings.jsx`** — elastic line segments drawn between all 24 shared-edge adjacent pairs in the 4×4 group grid. Each midpoint wobbles with a frequency and amplitude proportional to the smoothed XZ displacement of its two endpoint groups. Strings fade in when groups are displaced, fade out when the cloud is at rest.
+- **`OrbitIndicator.jsx`** — Fresnel rim-glow sphere (additive blending) that appears when the camera is orbiting. Rim opacity scales with orbital speed; combined with DitherBleed's ink-bleed it halos into a soft atmospheric smear.
+- **`ChordController.jsx`** — pointer event handler (no render output). Long-press (80 ms) on the canvas sphere triggers a chord; the tapped world point determines the root group via `groupFromWorldPoint`, and the group's color-affinity pitch class seeds the root semitone. Drag while held sweeps filter cutoff (X axis, logarithmic 200–12 kHz) and resonance Q (Y axis, 0.5–8). Multi-touch cancels chord and lets orbit/pinch through. `ChordRing` renders a Fresnel rim sphere at the tap point while the chord is active.
+- **`AudioAtmos.jsx`** — ambient atmosphere audio node.
+- **`OrbitLights.jsx`** — dynamic lights that orbit the cloud.
+- **`DitherBleed.jsx`** — full-screen post-process via `EffectComposer` + `ShaderPass`:
+  - **Ink bleed**: 5×5 luminance-weighted neighbourhood diffusion softens point edges into an ink-wash texture.
+  - **Bayer ordered dithering**: 4×4 threshold matrix applied strongest on bright pixels, adds organic grain.
+  - **Grain echo** (sculpt only): directional screen-space smear in the direction of the current grain azimuth (positionFraction → angle), plus additive ghost of a nearby sample. Intensity driven by normalized grain size and orbital speed.
+  - **Sparkle**: stochastic per-pixel flicker at 14 fps on cloud pixels in dark surrounding areas, gated by echo strength.
+  - **Edge vignette**: radial darkening of screen corners, center unaffected.
+
+---
+
+#### UI components (`ui/`)
+
+- **`MediaBar.jsx`** — unified bottom bar. Expands to reveal: sensitivity slider (global band-energy multiplier, persisted), POND album track list (6 tracks, prefetched on mount, one selected at random and loaded automatically), cloud library (bundled + user-uploaded), audio drag-drop zone, PLY drag-drop zone. Collapsed bar shows transport controls (play/pause, scrub, time, loop, BPM) in reactive mode, or the track name in sculpt mode. Audio context is started on first pointer interaction, which also auto-switches to sculpt mode.
+- **`SculptHUD.jsx`** — canvas-rendered waveform display in sculpt mode. Five scrolling rows (POS, GRN, RATE, LAP, SPD) show the last 90 samples of grain parameters. A lit-dots row at the bottom shows how many of the 16 groups are resonating above threshold. All lines turn purple when grain is frozen.
+- **`MappingsPanel.jsx`** — collapsible left-side panel (reactive mode only). Each of the four effects (EXPLODE, DISSOLVE, MAGNIFY, CHOP) has: band selector, strength slider, and a 4×4 group-bitmask toggle grid. Settings persist to `localStorage`.
+- **`ModeToggle.jsx`** — two-button toggle (top-center) to switch between reactive and sculpt.
+- **`KeyboardHelper.jsx`** — hints bar that fades after 5 s; `?` opens a full help overlay with a two-column table (reactive / sculpt) for all shortcuts. Shortcuts: SPACE (play/pause or freeze), M (mode), G (group grid), R (reset camera), ESC (close/pond).
+
+---
+
+#### Cloud system (`clouds/`)
+
+- **`_manifest.js`** — bundled PLY registry with `id`, `name`, `file` path, `meta` JSON path, `targetPoints`.
+- **`loaders.js`** — `loadPLY` / `loadPLYFromFile` (binary + ASCII PLY), `decimate` (stratified 16³-grid sampling to target point count), `normalize` (center + scale to −1…+1 bounding cube), `computeGroupAffinities` (assigns each of the 16 spatial groups a dominant pitch class from the average color hue of its points, plus an affinity strength from point density).
+- User-uploaded PLY files are capped at 2 M points before decimation to 300 K; a notice is shown if decimation occurs. Up to the last two user clouds are kept in session.
+
+**Chord voicing config** and **effect mappings** persist to `localStorage`. Mode + sculpt params persist to `sessionStorage` across pond ↔ murmur navigation.
 
 Routes: `/murmur` (instrument), `/murmur/about` (mode guides and cloud registry).
 
